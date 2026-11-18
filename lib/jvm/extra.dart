@@ -73,6 +73,17 @@ void installExtra(Vm vm) {
   }, isStatic: true);
 
   // ---------- số ----------
+  vm.reg('java/lang/Double', 'isNaN', '(D)Z', (v, t, a) => (a[0] as double).isNaN ? 1 : 0, isStatic: true);
+  vm.reg('java/lang/Double', 'isInfinite', '(D)Z', (v, t, a) => (a[0] as double).isInfinite ? 1 : 0, isStatic: true);
+  vm.reg('java/lang/Float', 'isNaN', '(F)Z', (v, t, a) => (a[0] as double).isNaN ? 1 : 0, isStatic: true);
+  vm.reg('java/lang/Float', 'isInfinite', '(F)Z', (v, t, a) => (a[0] as double).isInfinite ? 1 : 0, isStatic: true);
+  vm.reg('java/lang/Integer', 'toString', '(II)Ljava/lang/String;', (v, t, a) => s(i(a, 0).toRadixString(i(a, 1))), isStatic: true);
+  vm.reg('java/lang/Integer', 'parseInt', '(Ljava/lang/String;I)I', (v, t, a) {
+    final r = int.tryParse(ss(a[0]), radix: i(a, 1));
+    if (r == null || r.abs() > 0x7fffffff + 1) throw v.ex('java/lang/NumberFormatException', ss(a[0]));
+    return r.toSigned(32);
+  }, isStatic: true);
+  vm.reg('java/lang/Long', 'toString', '(JI)Ljava/lang/String;', (v, t, a) => s(i(a, 0).toRadixString(i(a, 2))), isStatic: true);
   vm.reg('java/lang/Short', 'parseShort', '(Ljava/lang/String;)S', (v, t, a) {
     final r = int.tryParse(ss(a[0]));
     if (r == null || r < -32768 || r > 32767) throw v.ex('java/lang/NumberFormatException', ss(a[0]));

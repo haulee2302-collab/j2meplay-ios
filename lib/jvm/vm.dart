@@ -298,8 +298,14 @@ class Vm {
   bool instanceOf(dynamic o, String cname) {
     if (o == null) return false;
     if (o is JArray) {
-      return cname == 'java/lang/Object' || cname == o.type || cname.startsWith('[');
+      if (cname == 'java/lang/Object' || cname == 'java/lang/Cloneable' || cname == o.type) return true;
+      if (!cname.startsWith('[')) return false;
+      // mảng tham chiếu: [Lx; hoặc [[...] tương thích khi cả hai đều là mảng đối tượng
+      final refA = o.type.startsWith('[L') || o.type.startsWith('[[');
+      final refB = cname.startsWith('[L') || cname.startsWith('[[');
+      return refA && refB;
     }
+    if (cname.startsWith('[')) return false;
     final obj = o as JObject;
     return obj.cls.isSubOf(loadClass(cname));
   }
