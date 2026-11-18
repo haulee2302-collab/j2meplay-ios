@@ -27,17 +27,27 @@ class _RentalsScreenState extends State<RentalsScreen> {
   User? user = Api.instance.user;
   Timer? _timer;
   int _shotRun = 0;
+  final ScrollController _scroll = ScrollController();
+  bool headerGone = false;
+
+  String get _name => (user?.name.isNotEmpty == true ? user!.name : (user?.email ?? 'Bạn'));
+  String get _initial => _name.trim().isEmpty ? '?' : _name.trim().characters.first.toUpperCase();
 
   @override
   void initState() {
     super.initState();
     load();
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => load(silent: true));
+    _scroll.addListener(() {
+      final g = _scroll.offset > 300;
+      if (g != headerGone) setState(() => headerGone = g);
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -116,53 +126,69 @@ class _RentalsScreenState extends State<RentalsScreen> {
     }
   }
 
-  void openMenu(Rental r) {
+  Future<void> openMenu(Rental r, BuildContext btn) async {
     final off = r.poweredOff;
     final canPlay = r.viewable && r.status != 'provisioning' && r.status != 'powering_off';
-    Widget item(JpIconData icon, String text, VoidCallback f, {bool enabled = true, bool danger = false}) => ListTile(
-          dense: true,
+    final box = btn.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(btn).context.findRenderObject() as RenderBox;
+    final tl = box.localToGlobal(Offset.zero, ancestor: overlay);
+    final size = overlay.size;
+    const menuW = 190.0;
+    var left = tl.dx;
+    if (left + menuW > size.width - 6) left = tl.dx + box.size.width - menuW;
+    left = left.clamp(6.0, size.width - menuW - 6);
+    final position = RelativeRect.fromLTRB(left, tl.dy + box.size.height + 6, size.width - left - menuW, 0);
+    PopupMenuItem<String> item(String v, JpIconData icon, String text, {bool enabled = true, bool danger = false}) => PopupMenuItem<String>(
+          value: v,
           enabled: enabled,
-          leading: JpIcon(icon, size: 20, color: !enabled ? Jp.lineStrong : (danger ? Jp.danger : Jp.primary)),
-          title: Text(text, style: TextStyle(fontSize: 14, color: !enabled ? Jp.muted : (danger ? Jp.danger : Jp.text))),
-          onTap: () { Navigator.pop(context); f(); },
-        );
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Jp.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
-      builder: (c) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const SizedBox(height: 8),
-            ListTile(title: Text(r.deviceName, style: TextStyle(fontWeight: FontWeight.w700, color: Jp.text)), subtitle: Text(r.productName ?? '')),
-            if (off)
-              item(JpIcons.power, 'Bật J2ME', () => powerOn(r))
-            else ...[
-              item(JpIcons.restart2, 'Khởi động lại', () => dialog('restart', r), enabled: canPlay),
-              item(JpIcons.screen, 'Đổi kích thước', () => dialog('screen-size', r), enabled: canPlay),
-              item(JpIcons.globe, 'Proxy', () => dialog('proxy', r), enabled: canPlay),
-            ],
-            item(JpIcons.clock, 'Gia hạn', () => extend(r)),
-            item(r.autoRenew ? JpIcons.toggleOn : JpIcons.toggleOff, r.autoRenew ? 'Tắt gia hạn tự động' : 'Bật gia hạn tự động', () => toggleAutoRenew(r)),
-            item(JpIcons.edit, 'Đổi tên máy', () => dialog('name', r)),
-            if (!off) item(JpIcons.power, 'Tắt J2ME', () => dialog('power-off', r), danger: true),
-            const SizedBox(height: 6),
+          height: 42,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(children: [
+            JpIcon(icon, size: 18, color: !enabled ? Jp.lineStrong : (danger ? Jp.danger : Jp.primary)),
+            const SizedBox(width: 12),
+            Expanded(child: Text(text, style: TextStyle(fontSize: 13, color: !enabled ? Jp.muted : (danger ? Jp.danger : Jp.text)))),
           ]),
-        ),
-      ),
+        );
+    final v = await showMenu<String>(
+      context: context,
+      position: position,
+      color: Jp.surface,
+      elevation: 10,
+      constraints: const BoxConstraints(minWidth: menuW, maxWidth: menuW + 60),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Jp.line)),
+      items: [
+        if (off)
+          item('power-on', JpIcons.power, 'Bật J2ME')
+        else ...[
+          item('restart', JpIcons.restart2, 'Khởi động lại', enabled: canPlay),
+          item('screen-size', JpIcons.screen, 'Đổi kích thước', enabled: canPlay),
+          item('proxy', JpIcons.globe, 'Proxy', enabled: canPlay),
+        ],
+        item('extend', JpIcons.clock, 'Gia hạn'),
+        item('auto-renew', r.autoRenew ? JpIcons.toggleOn : JpIcons.toggleOff, r.autoRenew ? 'Tắt gia hạn tự động' : 'Bật gia hạn tự động'),
+        item('name', JpIcons.edit, 'Đổi tên máy'),
+        if (!off) item('power-off', JpIcons.power, 'Tắt J2ME', danger: true),
+      ],
     );
+    if (v == null || !mounted) return;
+    switch (v) {
+      case 'power-on': powerOn(r); break;
+      case 'extend': extend(r); break;
+      case 'auto-renew': toggleAutoRenew(r); break;
+      default: dialog(v, r);
+    }
   }
 
   void openRent() async {
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       backgroundColor: Jp.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (c) => const RentSheet(),
     );
-    if (ok == true) load();
+    if (ok != null && mounted) { toast(context, ok); load(silent: true); }
   }
 
   void openGame(Rental r) => Navigator.push(context, MaterialPageRoute(builder: (_) => GameScreen(rental: r)));
@@ -171,38 +197,49 @@ class _RentalsScreenState extends State<RentalsScreen> {
   Widget build(BuildContext context) {
     final viewable = rentals.where((r) => r.viewable).toList();
     final cardW = (MediaQuery.of(context).size.width - 34) / 2;
-    final extent = cardW * 3 / 4 + 92;
+    final extent = cardW * 3 / 4 + 98;
     return RefreshIndicator(
       onRefresh: load,
       child: Stack(children: [
-        ListView(padding: EdgeInsets.zero, children: [
+        ListView(controller: _scroll, padding: EdgeInsets.zero, children: [
           HeroHeader(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Container(width: 42, height: 42, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const JpIcon(JpIcons.navUser, color: Colors.white)),
+                Container(width: 42, height: 42, alignment: Alignment.center, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: Text(_initial, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700))),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Xin chào', style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
-                  Text(user?.name.isNotEmpty == true ? user!.name : (user?.email ?? ''), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                  Text(_name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
                 ])),
                 const ThemeToggle(),
               ]),
               const SizedBox(height: 14),
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Số dư', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13)),
-                  Text(money(user?.balance ?? 0), style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
-                  Text('${rentals.where((r) => !r.expired).length} phiên đang thuê', style: const TextStyle(color: Jp.highlight, fontSize: 13, fontWeight: FontWeight.w600)),
-                ])),
-                PrimaryButton('Thuê phiên mới', openRent, icon: JpIcons.add, container: Colors.white, content: Jp.primary, height: 40, fontSize: 12),
-                const SizedBox(width: 8),
-              ]),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      JpIcon(JpIcons.wallet, size: 16, color: Colors.white.withOpacity(0.8)),
+                      const SizedBox(width: 6),
+                      Text('Số dư', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13)),
+                    ]),
+                    Text(money(user?.balance ?? 0), style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700)),
+                    Text('${rentals.where((r) => !r.expired).length} phiên đang thuê', style: const TextStyle(color: Jp.highlight, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ])),
+                  PrimaryButton('Thuê phiên', openRent, icon: JpIcons.add, container: Colors.white, content: Jp.primary, height: 44, fontSize: 14),
+                ]),
+              ),
             ]),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Row(children: [
-              Expanded(child: SectionTitle('Phiên J2ME của bạn', count: rentals.length)),
+              Text('Phiên J2ME của bạn', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Jp.text)),
+              if (rentals.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3), decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(99)), child: Text('${rentals.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Jp.primaryDark))),
+              ],
+              const Spacer(),
               IconButton(
                 onPressed: () => load(),
                 icon: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Jp.primary)) : const JpIcon(JpIcons.refresh, color: Jp.primary),
@@ -211,11 +248,11 @@ class _RentalsScreenState extends State<RentalsScreen> {
           ),
           if (rentals.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
               child: SizedBox(
                 width: double.infinity,
                 child: PrimaryButton('Xem tất cả (${viewable.length})', viewable.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => SyncScreen(rentals: viewable))),
-                    icon: JpIcons.syncIcon, height: 34, fontSize: 12),
+                    icon: JpIcons.syncIcon, height: 30, fontSize: 12),
               ),
             ),
           if (loading && rentals.isEmpty) const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: Jp.primary)))
@@ -233,7 +270,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
           ),
           const SizedBox(height: 80),
         ]),
-        if (viewable.isNotEmpty)
+        if (viewable.isNotEmpty && headerGone)
           Positioned(
             right: 16,
             bottom: 18,
@@ -263,22 +300,24 @@ class _RentalsScreenState extends State<RentalsScreen> {
       );
 
   (String, Color) _state(Rental r) {
-    if (r.expired) return ('Hết hạn', Jp.danger);
-    switch (r.status) {
-      case 'active': return ('Đang chạy', Jp.success);
-      case 'powered_off': return ('Đã tắt', Jp.muted);
-      case 'provisioning': return ('Đang tạo', Jp.infoBlue);
-      case 'powering_on': return ('Đang bật', Jp.infoBlue);
-      case 'powering_off': return ('Đang tắt', Jp.infoBlue);
-      case 'restarting': return ('Khởi động lại', Jp.infoBlue);
-      default: return ('Đã dừng', Jp.muted);
-    }
+    if (r.expired || r.status == 'expired') return ('Hết hạn', Jp.muted);
+    if (r.status == 'powered_off') return ('Đã tắt', Jp.muted);
+    if (r.status == 'powering_off') return ('Đang tắt...', Jp.muted);
+    if (r.status == 'powering_on') return ('Đang bật...', Jp.infoBlue);
+    if (r.status == 'restarting') return ('Đang khởi động...', Jp.infoBlue);
+    if (r.status == 'provisioning') return ('Đang khởi tạo...', Jp.infoBlue);
+    if (r.connectionStatus == 'disconnected') return ('Mất kết nối', Jp.danger);
+    if (r.status == 'launch_error') return ('Lỗi khởi chạy', Jp.danger);
+    if (r.status == 'active') return ('Sẵn sàng', Jp.success);
+    return (r.status, Jp.muted);
   }
 
   Widget _card(Rental r) {
     final (label, color) = _state(r);
     final shot = shots[r.id];
     final off = r.poweredOff;
+    final expired = r.expired;
+    final canPlay = !expired && !off && r.status != 'provisioning' && r.status != 'powering_off';
     return Container(
       decoration: cardDeco(),
       clipBehavior: Clip.antiAlias,
@@ -289,43 +328,42 @@ class _RentalsScreenState extends State<RentalsScreen> {
             color: Jp.gameBg,
             child: Stack(fit: StackFit.expand, children: [
               if (shot != null) Image.memory(shot, fit: BoxFit.cover, gaplessPlayback: true, filterQuality: FilterQuality.none)
-              else Center(child: JpIcon(JpIcons.screen, size: 38, color: Jp.muted.withOpacity(0.6))),
+              else Center(child: Opacity(opacity: off || expired ? 0.35 : 0.85, child: FractionallySizedBox(widthFactor: 0.7, child: Image.asset('assets/jp_logo.png', fit: BoxFit.fitWidth)))),
+              if (off || expired) Container(color: Colors.black.withOpacity(0.35)),
               Positioned(top: 6, left: 6, child: StatusPill(label, color, white: true)),
-              if (r.screenWidth > 0)
-                Positioned(
-                  bottom: 6, right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(color: const Color(0x99000000), borderRadius: BorderRadius.circular(5)),
-                    child: Text('${r.screenWidth}×${r.screenHeight}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-                  ),
-                ),
+              if (busyId == r.id) const Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))),
             ]),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+          padding: const EdgeInsets.all(10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(r.deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Jp.text)),
-            const SizedBox(height: 2),
-            Text(remaining(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Jp.muted)),
-            const SizedBox(height: 8),
-            Row(children: [
-              Expanded(
-                child: off
-                    ? PrimaryButton('Bật', busyId == r.id ? null : () => powerOn(r), loading: busyId == r.id, height: 30, fontSize: 12)
-                    : PrimaryButton('Xem', r.viewable ? () => openGame(r) : null, height: 30, fontSize: 12),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 30, height: 30,
-                child: OutlinedButton(
-                  onPressed: () => openMenu(r),
-                  style: OutlinedButton.styleFrom(padding: EdgeInsets.zero, side: BorderSide(color: Jp.lineStrong), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                  child: const JpIcon(JpIcons.more, size: 16, color: Jp.primary),
+            Text(r.deviceName.isEmpty ? 'Máy J2ME' : r.deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Jp.text)),
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 8),
+              child: Row(children: [
+                JpIcon(JpIcons.clock, size: 12, color: expired ? Jp.danger : Jp.muted),
+                const SizedBox(width: 4),
+                Expanded(child: Text(remaining(r), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: expired ? Jp.danger : Jp.muted))),
+              ]),
+            ),
+            if (!expired)
+              Row(children: [
+                Expanded(
+                  child: off
+                      ? PrimaryButton('Bật máy', busyId == r.id ? null : () => powerOn(r), loading: busyId == r.id, height: 30, fontSize: 12)
+                      : PrimaryButton('Màn hình', canPlay ? () => openGame(r) : null, height: 30, fontSize: 12),
                 ),
-              ),
-            ]),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 30, height: 30,
+                  child: Builder(builder: (bc) => OutlinedButton(
+                    onPressed: busyId == r.id ? null : () => openMenu(r, bc),
+                    style: OutlinedButton.styleFrom(padding: EdgeInsets.zero, side: BorderSide(color: Jp.line), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                    child: const JpIcon(JpIcons.more, size: 18, color: Jp.primary),
+                  )),
+                ),
+              ]),
           ]),
         ),
       ]),
@@ -342,10 +380,11 @@ class RentSheet extends StatefulWidget {
 class _RentSheetState extends State<RentSheet> {
   List<Product> products = [];
   Product? picked;
-  int qty = 1;
+  int cycles = 1, devices = 1;
   Map<String, dynamic>? preview;
-  bool busy = false;
+  bool calculating = false, busy = false;
   String? error;
+  int _run = 0;
 
   @override
   void initState() {
@@ -357,76 +396,125 @@ class _RentSheetState extends State<RentSheet> {
     }).catchError((e) { if (mounted) setState(() => error = e.toString()); });
   }
 
+  /// Đổi lựa chọn: giữ bảng giá cũ (không nháy), chờ 250ms rồi hỏi giá mới.
   Future<void> refresh() async {
-    if (picked == null) return;
+    final p = picked;
+    if (p == null) return;
+    final run = ++_run;
+    setState(() => calculating = true);
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (run != _run || !mounted) return;
     try {
-      final p = await Api.instance.previewRental(picked!.id, qty);
-      if (mounted) setState(() { preview = p; error = null; });
+      final r = await Api.instance.previewBulk(p.id, cycles, devices);
+      if (mounted && run == _run) setState(() { preview = r; error = null; calculating = false; });
     } on ApiError catch (e) {
-      if (mounted) setState(() { preview = null; error = e.message; });
+      if (mounted && run == _run) setState(() { error = e.message; calculating = false; });
     }
   }
 
   Future<void> submit() async {
     setState(() => busy = true);
     try {
-      await Api.instance.createRental(picked!.id, qty);
-      if (mounted) Navigator.pop(context, true);
+      final n = await Api.instance.createBulk(picked!.id, cycles, devices);
+      if (mounted) Navigator.pop(context, 'Đã thuê $n phiên mới. Máy đang được khởi tạo…');
     } on ApiError catch (e) {
       if (mounted) setState(() { busy = false; error = e.message; });
     }
   }
 
+  String _unit(int d) => d == 1 ? 'ngày' : d == 7 ? 'tuần' : d == 30 ? 'tháng' : '$d ngày';
+  int _n(dynamic v) => v is num ? v.toInt() : 0;
+
+  Widget _stepper(String label, String hint, int value, int min, int max, void Function(int) f) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Jp.text)),
+            Text(hint, style: TextStyle(fontSize: 12, color: Jp.muted)),
+          ])),
+          Container(
+            height: 34,
+            decoration: BoxDecoration(border: Border.all(color: Jp.line), borderRadius: BorderRadius.circular(8)),
+            child: Row(children: [
+              InkWell(onTap: value > min ? () { f(value - 1); refresh(); } : null, child: SizedBox(width: 34, height: 34, child: Center(child: JpIcon(JpIcons.remove, size: 18, color: value > min ? Jp.primary : Jp.lineStrong)))),
+              ConstrainedBox(constraints: const BoxConstraints(minWidth: 36), child: Text('$value', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Jp.text))),
+              InkWell(onTap: value < max ? () { f(value + 1); refresh(); } : null, child: SizedBox(width: 34, height: 34, child: Center(child: JpIcon(JpIcons.add, size: 18, color: value < max ? Jp.primary : Jp.lineStrong)))),
+            ]),
+          ),
+        ]),
+      );
+
+  Widget _row(String l, String v, Color c) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [Expanded(child: Text(l, style: TextStyle(color: Jp.muted, fontSize: 14))), Text(v, style: TextStyle(color: c, fontSize: 14, fontWeight: FontWeight.w600))]),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final amount = ((preview?['amount'] ?? 0) as num).toInt();
-    final enough = preview?['enoughBalance'] != false;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(18, 18, 18, 18 + MediaQuery.of(context).viewInsets.bottom),
+    final pv = preview;
+    final dur = picked?.durationDays ?? 1;
+    final base = _n(pv?['baseAmount']), amount = _n(pv?['amount']);
+    final enoughBal = pv?['enoughBalance'] != false, enoughCap = pv?['enoughCapacity'] != false;
+    final msg = error ?? (pv == null ? null : !enoughBal ? 'Số dư không đủ để thuê.' : !enoughCap ? 'Máy chủ hiện không đủ chỗ cho số máy đã chọn.' : null);
+    final can = !calculating && error == null && pv != null && enoughBal && enoughCap;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
+        top: false,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Thuê phiên mới', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Jp.text)),
-          const SizedBox(height: 2),
-          Text('Chọn gói và số chu kỳ.', style: TextStyle(fontSize: 13, color: Jp.muted)),
-          const SizedBox(height: 12),
+          Padding(padding: const EdgeInsets.only(top: 2, bottom: 14), child: Text('Chọn gói, số chu kỳ và số máy.', style: TextStyle(fontSize: 13, color: Jp.muted))),
           if (products.isEmpty && error == null) const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Jp.primary))),
           for (final p in products)
             GestureDetector(
               onTap: () { setState(() => picked = p); refresh(); },
               child: Container(
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 decoration: BoxDecoration(
                   color: picked?.id == p.id ? Jp.primarySoft : Jp.surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: picked?.id == p.id ? Jp.primary : Jp.line, width: picked?.id == p.id ? 1.5 : 1),
                 ),
                 child: Row(children: [
+                  JpIcon(picked?.id == p.id ? JpIcons.radioOn : JpIcons.radioOff, size: 20, color: picked?.id == p.id ? Jp.primary : Jp.muted),
+                  const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(p.name, style: TextStyle(fontWeight: FontWeight.w700, color: Jp.text)),
+                    Text(p.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Jp.text)),
                     Text('${p.durationDays} ngày / chu kỳ', style: TextStyle(fontSize: 12, color: Jp.muted)),
                   ])),
                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text(money(p.price), style: const TextStyle(fontWeight: FontWeight.w800, color: Jp.primary)),
-                    if (p.originalPrice > p.price) Text(money(p.originalPrice), style: TextStyle(fontSize: 11, color: Jp.muted, decoration: TextDecoration.lineThrough)),
+                    Text(money(p.price), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Jp.primary)),
+                    if (p.originalPrice > p.price) Text(money(p.originalPrice), style: TextStyle(fontSize: 12, color: Jp.muted, decoration: TextDecoration.lineThrough)),
                   ]),
                 ]),
               ),
             ),
-          Row(children: [
-            Expanded(child: Text('Số chu kỳ', style: TextStyle(color: Jp.muted, fontSize: 14))),
-            IconButton(onPressed: qty > 1 ? () { setState(() => qty--); refresh(); } : null, icon: const JpIcon(JpIcons.remove)),
-            Text('$qty', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Jp.text)),
-            IconButton(onPressed: qty < 12 ? () { setState(() => qty++); refresh(); } : null, icon: const JpIcon(JpIcons.add)),
-          ]),
-          Row(children: [
-            Expanded(child: Text('Thành tiền', style: TextStyle(color: Jp.muted, fontSize: 14))),
-            Text(money(amount), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Jp.text)),
-          ]),
-          if (!enough) const Padding(padding: EdgeInsets.only(top: 6), child: Text('Số dư không đủ. Hãy nạp thêm tiền.', style: TextStyle(color: Jp.danger, fontSize: 13))),
-          if (error != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(error!, style: const TextStyle(color: Jp.danger, fontSize: 13))),
-          const SizedBox(height: 14),
-          SizedBox(width: double.infinity, child: PrimaryButton('Thuê ngay', picked != null && enough ? submit : null, loading: busy)),
+          _stepper('Số chu kỳ', '$cycles ${_unit(dur)} = ${cycles * dur} ngày', cycles, 1, 3650 ~/ (dur < 1 ? 1 : dur), (v) => setState(() => cycles = v)),
+          _stepper('Số máy', 'Mỗi máy là một phiên riêng', devices, 1, 50, (v) => setState(() => devices = v)),
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: Jp.bgFaint, borderRadius: BorderRadius.circular(10)),
+            child: Opacity(
+              opacity: calculating && pv != null ? 0.55 : 1,
+              child: Column(children: [
+                _row('Tạm tính', pv == null ? '—' : money(base), Jp.text),
+                _row('Ưu đãi', pv == null ? '—' : (base > amount ? '-${money(base - amount)}' : '0 đ'), Jp.success),
+                Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1, color: Jp.line)),
+                Row(children: [
+                  Expanded(child: Text('Thành tiền', style: TextStyle(color: Jp.muted, fontSize: 14))),
+                  if (calculating) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Jp.primary))),
+                  Text(pv == null ? '—' : money(amount), style: TextStyle(color: Jp.text, fontSize: 17, fontWeight: FontWeight.w700)),
+                ]),
+                _row('Số dư sau khi thuê', pv == null ? '—' : money(_n(pv['balanceAfter'])), !enoughBal ? Jp.danger : Jp.muted),
+              ]),
+            ),
+          ),
+          ConstrainedBox(constraints: const BoxConstraints(minHeight: 22), child: Padding(padding: const EdgeInsets.only(top: 6), child: msg == null ? null : Text(msg, style: const TextStyle(color: Jp.danger, fontSize: 13, fontWeight: FontWeight.w500)))),
+          const SizedBox(height: 8),
+          SizedBox(width: double.infinity, child: PrimaryButton(devices > 1 ? 'Xác nhận thuê $devices máy' : 'Xác nhận thuê', can ? submit : null, loading: busy, height: 50)),
         ]),
       ),
     );

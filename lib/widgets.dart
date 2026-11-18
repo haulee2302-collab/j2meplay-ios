@@ -101,7 +101,7 @@ class HeroHeader extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
         child: Stack(children: [
           Positioned(top: -50, right: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
-          SafeArea(bottom: false, child: Padding(padding: const EdgeInsets.fromLTRB(20, 8, 12, 20), child: child)),
+          Padding(padding: EdgeInsets.fromLTRB(20, topInset(context) + 8, 12, 20), child: child),
         ]),
       ),
     );
@@ -182,8 +182,10 @@ class JpField extends StatefulWidget {
   final TextInputType keyboard;
   final TextInputAction action;
   final VoidCallback? onSubmit;
+  final ValueChanged<String>? onChanged;
+  final int? maxLen;
   const JpField(this.label, this.controller, this.icon,
-      {super.key, this.placeholder = '', this.password = false, this.keyboard = TextInputType.text, this.action = TextInputAction.next, this.onSubmit});
+      {super.key, this.placeholder = '', this.password = false, this.keyboard = TextInputType.text, this.action = TextInputAction.next, this.onSubmit, this.onChanged, this.maxLen});
   @override
   State<JpField> createState() => _JpFieldState();
 }
@@ -203,6 +205,9 @@ class _JpFieldState extends State<JpField> {
         autocorrect: false,
         enableSuggestions: !widget.password,
         onSubmitted: (_) => widget.onSubmit?.call(),
+        onChanged: widget.onChanged,
+        maxLength: widget.maxLen,
+        buildCounter: (c, {required currentLength, required isFocused, maxLength}) => null,
         style: TextStyle(fontSize: 15, color: Jp.text),
         decoration: InputDecoration(
           hintText: widget.placeholder,
@@ -348,10 +353,8 @@ class PageHead extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
         child: Stack(children: [
           Positioned(top: -50, right: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          Padding(
+              padding: EdgeInsets.fromLTRB(20, topInset(context) + 8, 20, 18),
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Padding(padding: const EdgeInsets.only(right: 40), child: Text(eyebrow, style: const TextStyle(color: Jp.highlight, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1))),
@@ -360,11 +363,29 @@ class PageHead extends StatelessWidget {
                 ])),
                 if (action != null) action!,
               ]),
-            ),
           ),
-          const Positioned(top: 0, right: 4, child: SafeArea(bottom: false, child: ThemeToggle())),
+          Positioned(top: topInset(context) - 4, right: 4, child: const ThemeToggle()),
         ]),
       ),
     );
   }
+}
+
+class SectionCard extends StatelessWidget {
+  final String title;
+  final String? sub;
+  final List<Widget> children;
+  const SectionCard(this.title, {super.key, this.sub, required this.children});
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: cardDeco(radius: 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Jp.text)),
+          if (sub != null) Padding(padding: const EdgeInsets.only(top: 1), child: Text(sub!, style: TextStyle(fontSize: 12, color: Jp.muted))),
+          const SizedBox(height: 10),
+          ...children,
+        ]),
+      );
 }

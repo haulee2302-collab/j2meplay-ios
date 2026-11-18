@@ -43,6 +43,37 @@ class _Choice extends StatelessWidget {
       );
 }
 
+
+/// Khung hộp thoại giống JpDialog của Android: bo 24, lề 18, tiêu đề đậm, nút Hủy + nút chính.
+class _Shell extends StatelessWidget {
+  final String title, confirm;
+  final Widget body;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onCancel;
+  final bool sending, danger;
+  const _Shell(this.title, this.body, this.confirm, this.onConfirm, this.onCancel, {this.sending = false, this.danger = false});
+  @override
+  Widget build(BuildContext context) => Dialog(
+        backgroundColor: Jp.surface,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: TextStyle(color: Jp.text, fontWeight: FontWeight.w700, fontSize: 18)),
+            const SizedBox(height: 8),
+            body,
+            const SizedBox(height: 12),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: sending ? null : onCancel, child: Text('Hủy', style: TextStyle(color: Jp.muted))),
+              const SizedBox(width: 4),
+              PrimaryButton(confirm, onConfirm, loading: sending, height: 44, container: danger ? Jp.danger : Jp.primary),
+            ]),
+          ]),
+        ),
+      );
+}
+
 /// Hộp thoại chức năng của một máy: đổi tên, kích thước màn hình, proxy, khởi động lại, tắt máy.
 /// Trả về thông báo thành công (hoặc null nếu huỷ).
 Future<String?> showRentalAction(BuildContext context, String kind, Rental r) =>
@@ -83,7 +114,7 @@ class _ActionDialogState extends State<_ActionDialog> {
     Widget body;
     switch (k) {
       case 'name':
-        body = TextField(controller: name, maxLength: 80, decoration: const InputDecoration(labelText: 'Tên máy', hintText: 'VD: Acc chính'));
+        body = JpField('Tên máy', name, JpIcons.edit, placeholder: 'VD: Acc chính', maxLen: 80, onChanged: (_) => setState(() {}), action: TextInputAction.done);
         break;
       case 'screen-size':
         body = Column(mainAxisSize: MainAxisSize.min, children: [
@@ -98,14 +129,28 @@ class _ActionDialogState extends State<_ActionDialog> {
           _Choice('Proxy riêng', 'Nhập proxy SOCKS5 / HTTP của bạn', proxyMode == 'custom', () => setState(() => proxyMode = 'custom')),
           _Choice('Tắt proxy', 'Dùng IP của máy chủ', proxyMode == 'off', () => setState(() => proxyMode = 'off')),
           if (proxyMode == 'custom') ...[
-            Row(children: [
-              for (final t in const [('socks5', 'SOCKS5'), ('http', 'HTTP')])
-                Expanded(child: Padding(
-                  padding: const EdgeInsets.only(right: 6, bottom: 8),
-                  child: ChoiceChip(label: Center(child: Text(t.$2)), selected: proxyType == t.$1, onSelected: (_) => setState(() => proxyType = t.$1)),
-                )),
-            ]),
-            TextField(controller: proxy, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Địa chỉ proxy', hintText: 'host:port[:user:pass]')),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Row(children: [
+                for (final t in const [('socks5', 'SOCKS5'), ('http', 'HTTP')]) ...[
+                  Expanded(child: GestureDetector(
+                    onTap: () => setState(() => proxyType = t.$1),
+                    child: Container(
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: proxyType == t.$1 ? Jp.primarySoft : Jp.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: proxyType == t.$1 ? Jp.primary : Jp.line, width: proxyType == t.$1 ? 1.5 : 1),
+                      ),
+                      child: Text(t.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: proxyType == t.$1 ? Jp.primaryDark : Jp.muted)),
+                    ),
+                  )),
+                  if (t.$1 == 'socks5') const SizedBox(width: 8),
+                ],
+              ]),
+            ),
+            JpField('Địa chỉ proxy', proxy, JpIcons.globe, placeholder: 'host:port[:user:pass]', keyboard: TextInputType.url, onChanged: (_) => setState(() {}), action: TextInputAction.done),
           ],
         ]);
         break;
@@ -116,37 +161,31 @@ class _ActionDialogState extends State<_ActionDialog> {
         body = Text('${r.deviceName} sẽ tắt và game đang chạy bị đóng. Thời gian thuê vẫn tiếp tục tính. Bạn có thể bật lại bất cứ lúc nào.', style: TextStyle(color: Jp.muted, fontSize: 14));
     }
     final canSave = !sending && (k != 'name' || name.text.trim().isNotEmpty) && (k != 'proxy' || proxyMode != 'custom' || proxy.text.trim().isNotEmpty);
-    return AlertDialog(
-      backgroundColor: Jp.surface,
-      title: Text(title, style: TextStyle(color: Jp.text, fontWeight: FontWeight.w700, fontSize: 18)),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+    void go() {
+      switch (k) {
+        case 'name': send('/api/site/rentals/$id/name', {'name': name.text.trim()}, 'Đã đổi tên máy'); break;
+        case 'screen-size':
+          final p = screen.split('x').map(int.parse).toList();
+          send('/api/site/rentals/$id/screen-size', {'width': p[0], 'height': p[1]}, 'Đang đổi màn hình ${p[0]} × ${p[1]}…');
+          break;
+        case 'proxy':
+          send('/api/site/rentals/$id/proxy', {'enabled': proxyMode != 'off', 'free': proxyMode == 'free', 'type': proxyType, 'address': proxy.text.trim()}, 'Đã lưu proxy');
+          break;
+        case 'restart': send('/api/site/rentals/$id/restart', {}, 'Đang khởi động lại ${r.deviceName}…'); break;
+        default: send('/api/site/rentals/$id/power-off', {}, 'Đang tắt ${r.deviceName}…');
+      }
+    }
+    return _Shell(
+      title,
+      Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         body,
-        if (err != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(err!, style: const TextStyle(color: Jp.danger, fontSize: 13))),
-      ])),
-      actions: [
-        TextButton(onPressed: sending ? null : () => Navigator.pop(context), child: Text('Hủy', style: TextStyle(color: Jp.muted))),
-        TextButton(
-          onPressed: !canSave
-              ? null
-              : () {
-                  switch (k) {
-                    case 'name': send('/api/site/rentals/$id/name', {'name': name.text.trim()}, 'Đã đổi tên máy'); break;
-                    case 'screen-size':
-                      final p = screen.split('x').map(int.parse).toList();
-                      send('/api/site/rentals/$id/screen-size', {'width': p[0], 'height': p[1]}, 'Đang đổi màn hình ${p[0]} × ${p[1]}…');
-                      break;
-                    case 'proxy':
-                      send('/api/site/rentals/$id/proxy', {'enabled': proxyMode != 'off', 'free': proxyMode == 'free', 'type': proxyType, 'address': proxy.text.trim()}, 'Đã lưu proxy');
-                      break;
-                    case 'restart': send('/api/site/rentals/$id/restart', {}, 'Đang khởi động lại ${r.deviceName}…'); break;
-                    default: send('/api/site/rentals/$id/power-off', {}, 'Đang tắt ${r.deviceName}…');
-                  }
-                },
-          child: sending
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : Text({'power-off': 'Tắt máy', 'restart': 'Khởi động lại'}[k] ?? 'Lưu', style: TextStyle(color: k == 'power-off' ? Jp.danger : Jp.primary, fontWeight: FontWeight.w600)),
-        ),
-      ],
+        if (err != null) Padding(padding: const EdgeInsets.only(top: 12), child: MessageBanner(err!)),
+      ]),
+      {'power-off': 'Tắt máy', 'restart': 'Khởi động lại'}[k] ?? 'Lưu',
+      canSave ? go : null,
+      () => Navigator.pop(context),
+      sending: sending,
+      danger: k == 'power-off',
     );
   }
 }
@@ -212,21 +251,33 @@ class _ExtendDialogState extends State<_ExtendDialog> {
     final r = widget.r;
     final enough = pv?['enoughBalance'] != false;
     final days = (sel?.durationDays ?? 1) * cycles;
-    return AlertDialog(
-      backgroundColor: Jp.surface,
-      title: Text('Gia hạn ${r.deviceName}', style: TextStyle(color: Jp.text, fontWeight: FontWeight.w700, fontSize: 18)),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Hết hạn hiện tại: ${_fmt(r.endsAt)}', style: TextStyle(color: Jp.muted, fontSize: 13)),
+    return _Shell(
+      'Gia hạn ${r.deviceName.isEmpty ? 'phiên' : r.deviceName}',
+      Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Hết hạn hiện tại: ${_fmt(r.endsAt)}', style: TextStyle(color: Jp.muted, fontSize: 14)),
         const SizedBox(height: 10),
         for (final p in widget.products) _Choice(p.name, '${p.durationDays} ngày · ${money(p.price)}', p.id == sel?.id, () { setState(() => sel = p); _preview(); }),
-        Row(children: [
-          Expanded(child: Text('Số chu kỳ ($days ngày)', style: TextStyle(color: Jp.muted, fontSize: 14))),
-          IconButton(onPressed: cycles > 1 ? () { setState(() => cycles--); _preview(); } : null, icon: const JpIcon(JpIcons.remove)),
-          Text('$cycles', style: TextStyle(fontWeight: FontWeight.w700, color: Jp.text)),
-          IconButton(onPressed: () { setState(() => cycles++); _preview(); }, icon: const JpIcon(JpIcons.add)),
-        ]),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Số chu kỳ', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Jp.text)),
+              Text('$days ngày', style: TextStyle(fontSize: 12, color: Jp.muted)),
+            ])),
+            Container(
+              height: 34,
+              decoration: BoxDecoration(border: Border.all(color: Jp.line), borderRadius: BorderRadius.circular(8)),
+              child: Row(children: [
+                InkWell(onTap: cycles > 1 ? () { setState(() => cycles--); _preview(); } : null, child: SizedBox(width: 34, height: 34, child: Center(child: JpIcon(JpIcons.remove, size: 18, color: cycles > 1 ? Jp.primary : Jp.lineStrong)))),
+                ConstrainedBox(constraints: const BoxConstraints(minWidth: 36), child: Text('$cycles', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Jp.text))),
+                InkWell(onTap: () { setState(() => cycles++); _preview(); }, child: SizedBox(width: 34, height: 34, child: Center(child: JpIcon(JpIcons.add, size: 18, color: Jp.primary)))),
+              ]),
+            ),
+          ]),
+        ),
         Container(
           width: double.infinity,
+          margin: const EdgeInsets.only(top: 4),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: Jp.bgFaint, borderRadius: BorderRadius.circular(10)),
           child: Opacity(opacity: calc && pv != null ? 0.55 : 1, child: Column(children: [
@@ -235,27 +286,24 @@ class _ExtendDialogState extends State<_ExtendDialog> {
             _row('Hạn mới', pv == null ? '—' : _fmt(pv!['targetEndsAt'])),
           ])),
         ),
-        if (err != null || !enough) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err ?? 'Số dư không đủ để gia hạn.', style: const TextStyle(color: Jp.danger, fontSize: 13))),
-      ])),
-      actions: [
-        TextButton(onPressed: sending ? null : () => Navigator.pop(context), child: Text('Hủy', style: TextStyle(color: Jp.muted))),
-        TextButton(
-          onPressed: (calc || err != null || !enough || pv == null || sending || sel == null)
-              ? null
-              : () async {
-                  setState(() => sending = true);
-                  final (c, j, _) = await Api.instance.rawPost('/api/site/rentals/${_id(r)}/extend', {'productId': sel!.id, 'quantity': cycles});
-                  if (!mounted) return;
-                  if (c >= 200 && c < 300) {
-                    final m = '${j?['message'] ?? ''}';
-                    Navigator.pop(context, m.isEmpty ? 'Đã gia hạn ${r.deviceName}.' : m);
-                  } else {
-                    setState(() { sending = false; err = _err(j, c, 'Gia hạn thất bại'); });
-                  }
-                },
-          child: const Text('Gia hạn', style: TextStyle(color: Jp.primary, fontWeight: FontWeight.w600)),
-        ),
-      ],
+        if (err != null || !enough) Padding(padding: const EdgeInsets.only(top: 6), child: Text(err ?? 'Số dư không đủ để gia hạn.', style: const TextStyle(color: Jp.danger, fontSize: 13))),
+      ]),
+      'Gia hạn',
+      (calc || err != null || !enough || pv == null || sending || sel == null)
+          ? null
+          : () async {
+              setState(() => sending = true);
+              final (c, j, _) = await Api.instance.rawPost('/api/site/rentals/${_id(r)}/extend', {'productId': sel!.id, 'quantity': cycles});
+              if (!mounted) return;
+              if (c >= 200 && c < 300) {
+                final m = '${j?['message'] ?? ''}';
+                Navigator.pop(context, m.isEmpty ? 'Đã gia hạn ${r.deviceName}.' : m);
+              } else {
+                setState(() { sending = false; err = _err(j, c, 'Gia hạn thất bại'); });
+              }
+            },
+      () => Navigator.pop(context),
+      sending: sending,
     );
   }
 

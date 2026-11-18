@@ -49,7 +49,8 @@ class Rental {
 class UserJar {
   final String id, name;
   final int size, createdAt;
-  UserJar(this.id, this.name, this.size, this.createdAt);
+  final String iconDataUrl;
+  UserJar(this.id, this.name, this.size, this.createdAt, [this.iconDataUrl = '']);
 }
 
 class CaptchaRequired extends ApiError {
@@ -206,6 +207,15 @@ class Api {
 
   Future<void> createRental(String productId, int quantity) =>
       _ok('POST', '/api/site/rentals', {'productId': productId, 'quantity': quantity}, 'Thuê phiên thất bại');
+
+  Future<Map<String, dynamic>> previewBulk(String productId, int quantity, int devices) =>
+      _ok('POST', '/api/site/rentals/bulk-preview', {'productId': productId, 'quantity': quantity, 'deviceCount': devices}, 'Không tính được giá thuê');
+
+  /// Thuê [devices] máy, mỗi máy [quantity] chu kỳ. Trả về số máy đã tạo.
+  Future<int> createBulk(String productId, int quantity, int devices) async {
+    final j = await _ok('POST', '/api/site/rentals/bulk', {'productId': productId, 'quantity': quantity, 'deviceCount': devices}, 'Thuê phiên thất bại');
+    return (j['items'] as List?)?.length ?? devices;
+  }
 
   Future<void> control(String rentalId, String action) =>
       _ok('POST', '/api/site/rentals/${Uri.encodeComponent(rentalId)}/$action', {}, 'Thực hiện thao tác thất bại');
