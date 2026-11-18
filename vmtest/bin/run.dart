@@ -10,10 +10,17 @@ import '../../lib/jvm/midp.dart';
 import '../../lib/jvm/vm.dart';
 
 Future<void> main(List<String> args) async {
-  final dir = Directory(args[0]);
-  final out = Directory(args[1])..createSync(recursive: true);
-  final jars = dir.listSync(recursive: true).whereType<File>().where((f) => f.path.toLowerCase().endsWith('.jar')).toList()
-    ..sort((a, b) => a.path.compareTo(b.path));
+  // dart run bin/run.dart <thư mục kết quả> <thư mục jar> [+thư mục jar đọc cả thư mục con] ...
+  final out = Directory(args[0])..createSync(recursive: true);
+  final jars = <File>[];
+  for (final a in args.skip(1)) {
+    final rec = a.startsWith('+');
+    final d = Directory(rec ? a.substring(1) : a);
+    if (!d.existsSync()) continue;
+    jars.addAll(d.listSync(recursive: rec).whereType<File>().where((f) => f.path.toLowerCase().endsWith('.jar')));
+  }
+  jars.removeWhere((f) => RegExp(r'(cfr|asm|apktool|gradle-wrapper)', caseSensitive: false).hasMatch(f.path.split(Platform.pathSeparator).last) || f.path.contains('tools'));
+  jars.sort((a, b) => a.path.compareTo(b.path));
   final summary = StringBuffer();
   var idx = 0;
   for (final f in jars) {
@@ -36,7 +43,7 @@ Future<void> main(List<String> args) async {
         final mid = vm.newInstance(info.midletClass!);
         unawaited(vm.runScheduler());
         m.start(mid);
-        final end = DateTime.now().add(const Duration(seconds: 12));
+        final end = DateTime.now().add(const Duration(seconds: 8));
         while (DateTime.now().isBefore(end)) {
           await Future.delayed(const Duration(milliseconds: 40));
           m.tick();
