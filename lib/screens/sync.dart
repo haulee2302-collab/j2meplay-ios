@@ -441,7 +441,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
                   if (tiles.isEmpty) Padding(padding: const EdgeInsets.all(12), child: Text('Chưa có phiên J2ME đang hoạt động để xem.', style: TextStyle(fontSize: 12, color: _mutedC))),
                   for (final t in tiles)
                     if (t.id != mainId && (!selectedOnly || selected.contains(t.id))) _small(t, smallW),
-                ]),
+                ])),
               ),
             ),
             if (groupPad && mainId.isEmpty && controlSmall) ...[
