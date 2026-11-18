@@ -4,6 +4,9 @@ import '../api.dart';
 import '../game/connection.dart';
 import '../game/keypad.dart';
 import '../game/midp.dart';
+import '../emu/session.dart';
+import '../emu/store.dart';
+import '../emu/game_screen.dart';
 import '../icons.dart';
 import '../theme.dart';
 import 'game.dart';
@@ -79,6 +82,10 @@ class _FloatingHostState extends State<FloatingHost> with WidgetsBindingObserver
       ValueListenableBuilder<List<_FloatWin>>(
         valueListenable: Floating.windows,
         builder: (_, list, __) => Stack(children: [for (final w in list) _FloatView(key: ValueKey(w.rental.id), win: w)]),
+      ),
+      ValueListenableBuilder<List<LocalInstance>>(
+        valueListenable: LocalFloats.windows,
+        builder: (_, list, __) => Stack(children: [for (final w in list) _LocalFloatView(key: ValueKey('l${w.id}'), inst: w)]),
       ),
     ]);
   }
@@ -212,6 +219,151 @@ class _FloatViewState extends State<_FloatView> {
               }),
             ),
             if (w.keypad) FittedBox(fit: BoxFit.fitWidth, child: SizedBox(width: 360, child: Container(color: Jp.surface, child: Keypad(c)))),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cửa sổ nổi cho giả lập local (chạy ngay trong app).
+class LocalFloats {
+  static final ValueNotifier<List<LocalInstance>> windows = ValueNotifier([]);
+  static final Map<String, Offset> _pos = {};
+
+  static void open(LocalInstance i) {
+    EmuRuntime.open(i);
+    if (windows.value.any((e) => e.id == i.id)) return;
+    _pos[i.id] = Offset(16.0 + windows.value.length * 24, 120.0 + windows.value.length * 24);
+    windows.value = [...windows.value, i];
+  }
+
+  static void close(String id) => windows.value = windows.value.where((e) => e.id != id).toList();
+}
+
+class _LocalFloatView extends StatefulWidget {
+  final LocalInstance inst;
+  const _LocalFloatView({super.key, required this.inst});
+  @override
+  State<_LocalFloatView> createState() => _LocalFloatViewState();
+}
+
+class _LocalFloatViewState extends State<_LocalFloatView> {
+  bool collapsed = false, keypad = false;
+  int step = 1;
+  EmuSession? s;
+
+  @override
+  void initState() {
+    super.initState();
+    s = EmuRuntime.sessions[widget.inst.id];
+    s?.addListener(_t);
+    s?.frame.addListener(_t);
+  }
+
+  @override
+  void dispose() {
+    s?.removeListener(_t);
+    s?.frame.removeListener(_t);
+    super.dispose();
+  }
+
+  void _t() { if (mounted) setState(() {}); }
+
+  Offset get pos => LocalFloats._pos[widget.inst.id] ?? const Offset(16, 120);
+
+  void _move(Offset d) {
+    final sz = MediaQuery.of(context).size;
+    setState(() => LocalFloats._pos[widget.inst.id] = Offset((pos.dx + d.dx).clamp(-60.0, sz.width - 60), (pos.dy + d.dy).clamp(MediaQuery.of(context).padding.top, sz.height - 60)));
+  }
+
+  Widget _hb(JpIconData icon, VoidCallback f, {bool on = false}) => GestureDetector(
+        onTap: f,
+        child: Container(
+          width: 26, height: 26,
+          decoration: BoxDecoration(color: on ? const Color(0x33FFFFFF) : Colors.transparent, borderRadius: BorderRadius.circular(6)),
+          child: Center(child: JpIcon(icon, size: 15, color: Colors.white)),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final inst = widget.inst;
+    final ses = s;
+    if (ses == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => LocalFloats.close(inst.id));
+      return const SizedBox.shrink();
+    }
+    final sz = MediaQuery.of(context).size;
+    if (collapsed) {
+      return Positioned(
+        left: pos.dx, top: pos.dy,
+        child: GestureDetector(
+          onPanUpdate: (d) => _move(d.delta),
+          onTap: () => setState(() => collapsed = false),
+          child: Container(
+            width: 58, height: 58,
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0x44000000), blurRadius: 8)]),
+            clipBehavior: Clip.antiAlias,
+            child: Image.asset('assets/jp_logo.png', fit: BoxFit.cover),
+          ),
+        ),
+      );
+    }
+    final width = [170.0, 230.0, 300.0][step].clamp(120.0, sz.width - 12);
+    return Positioned(
+      left: pos.dx, top: pos.dy, width: width,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Jp.lineStrong), boxShadow: const [BoxShadow(color: Color(0x44000000), blurRadius: 12, offset: Offset(0, 4))]),
+          clipBehavior: Clip.antiAlias,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            GestureDetector(
+              onPanUpdate: (d) => _move(d.delta),
+              child: Container(
+                height: 30,
+                color: Jp.primary,
+                padding: const EdgeInsets.only(left: 8, right: 2),
+                child: Row(children: [
+                  Expanded(child: Text(inst.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600))),
+                  _hb(JpIcons.toolKeyboard, () => setState(() => keypad = !keypad), on: keypad),
+                  _hb(JpIcons.toolExpand, () => setState(() => step = step == 2 ? 0 : step + 1)),
+                  _hb(JpIcons.screen, () {
+                    LocalFloats.close(inst.id);
+                    navKey.currentState?.push(MaterialPageRoute(builder: (_) => LocalGameScreen(inst: inst)));
+                  }),
+                  _hb(JpIcons.chevronDown, () => setState(() => collapsed = true)),
+                  GestureDetector(onTap: () => LocalFloats.close(inst.id), child: const SizedBox(width: 26, height: 26, child: Center(child: Text('✕', style: TextStyle(color: Colors.white, fontSize: 13))))),
+                ]),
+              ),
+            ),
+            AspectRatio(
+              aspectRatio: inst.width / inst.height,
+              child: LayoutBuilder(builder: (ctx, box) {
+                void touch(String ph, Offset p) => ses.pointer(ph, (p.dx / box.maxWidth * inst.width).clamp(0, inst.width - 1).toInt(), (p.dy / box.maxHeight * inst.height).clamp(0, inst.height - 1).toInt());
+                return Stack(fit: StackFit.expand, children: [
+                  Container(color: Jp.bgFaint),
+                  if (ses.frame.value != null)
+                    Listener(
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (e) => touch('down', e.localPosition),
+                      onPointerMove: (e) => touch('move', e.localPosition),
+                      onPointerUp: (e) => touch('up', e.localPosition),
+                      onPointerCancel: (e) => touch('up', e.localPosition),
+                      child: RawImage(image: ses.frame.value, fit: BoxFit.fill, filterQuality: Jp.fq),
+                    )
+                  else
+                    Container(
+                      color: Jp.surface,
+                      padding: const EdgeInsets.all(8),
+                      alignment: Alignment.center,
+                      child: Text(ses.status, maxLines: 3, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: ses.error ? Jp.danger : const Color(0xFF1769D9))),
+                    ),
+                ]);
+              }),
+            ),
+            if (keypad) FittedBox(fit: BoxFit.fitWidth, child: SizedBox(width: 360, child: Container(color: Jp.surface, child: Keypad(ses.keys)))),
           ]),
         ),
       ),

@@ -7,6 +7,14 @@ import 'classfile.dart';
 typedef NativeFn = dynamic Function(Vm vm, JThread t, List<dynamic> a);
 
 /// Ngoại lệ Java đang được ném (đối tượng Throwable).
+class VmTimer {
+  final JObject task;
+  int due;
+  final int period;
+  bool cancelled = false;
+  VmTimer(this.task, this.due, this.period);
+}
+
 class JavaThrow implements Exception {
   final JObject obj;
   JavaThrow(this.obj);
@@ -419,11 +427,64 @@ class Vm {
         }
       }
       threads.removeWhere((t) => t.done);
-      if (threads.isEmpty || !threads.any((t) => !t.daemon)) {
-        if (threads.isEmpty) break;
-      }
-      await Future.delayed(Duration(milliseconds: ran && sw.elapsedMilliseconds < 12 ? 1 : 4));
+      _tickTimers();
+      await Future.delayed(Duration(milliseconds: ran && sw.elapsedMilliseconds < 12 ? 1 : 8));
     }
+  }
+
+  final JThread uiThread = JThread(0);
+
+  /// Hẹn giờ java.util.Timer: [due] theo đồng hồ VM; period > 0 = lặp.
+  final List<VmTimer> timers = [];
+
+  void _tickTimers() {
+    if (timers.isEmpty) return;
+    final now = clock.elapsedMilliseconds;
+    for (final e in List<VmTimer>.of(timers)) {
+      if (e.cancelled) {
+        timers.remove(e);
+        continue;
+      }
+      if (e.due <= now) {
+        final m = findVirtual(e.task.cls, 'run()V');
+        if (m != null) newThread(m, [e.task], obj: null);
+        if (e.period > 0) {
+          e.due += e.period;
+        } else {
+          timers.remove(e);
+        }
+      }
+    }
+  }
+
+  /// Gọi phương thức Java từ giao diện (luồng riêng, không chặn).
+  dynamic callUi(JMethod m, List<dynamic> args) {
+    final prev = currentThread;
+    currentThread = uiThread;
+    try {
+      return callSync(m, args);
+    } finally {
+      currentThread = prev;
+    }
+  }
+
+  /// Khởi tạo lớp (chạy <clinit>) từ phía máy chủ.
+  void ensureInit(JClass c) {
+    if (c.initState != 0) return;
+    c.initState = 1;
+    if (c.sup != null) ensureInit(c.sup!);
+    final m = c.methods['<clinit>()V'];
+    if (m != null && m.info != null && m.info!.code != null) callSync(m, const []);
+    c.initState = 2;
+  }
+
+  JObject newInstance(String cls, [String ctorDesc = '()V', List<dynamic> args = const []]) {
+    final c = loadClass(cls);
+    ensureInit(c);
+    final o = JObject(c);
+    final m = findMethod(c, '<init>$ctorDesc');
+    if (m != null) callSync(m, [o, ...args]);
+    return o;
   }
 
   void stop() => stopped = true;
@@ -1020,12 +1081,11 @@ class Vm {
                 f.pc = pc;
                 if (target.info!.isSynchronized) {
                   final lo = isStatic ? classObject(target.cls) : args[0] as JObject;
-                  if (lo.lockOwner != null && !identical(lo.lockOwner, t)) {
+                  if (!nested && lo.lockOwner != null && !identical(lo.lockOwner, t)) {
                     // chờ khoá: chạy lại lệnh gọi sau
                     sp += n;
                     f.sp = sp;
                     f.pc = opPc;
-                    if (nested) continue outer;
                     t.blocker = () => lo.lockOwner == null;
                     return;
                   }
@@ -1096,10 +1156,9 @@ class Vm {
               final o = st[sp - 1];
               if (o == null) throw ex('java/lang/NullPointerException');
               final ob = o as JObject;
-              if (ob.lockOwner != null && !identical(ob.lockOwner, t)) {
+              if (!nested && ob.lockOwner != null && !identical(ob.lockOwner, t)) {
                 f.sp = sp;
                 f.pc = opPc;
-                if (nested) continue outer;
                 t.blocker = () => ob.lockOwner == null;
                 return;
               }
