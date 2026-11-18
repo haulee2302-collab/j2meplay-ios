@@ -75,13 +75,13 @@ class Midp {
   void Function()? onExit;
   void Function()? onFrame;
   final List<JObject> serial = [];
-  JObject? screen; // Form/List/TextBox/Alert đang hiển thị
+  JObject? form; // Form/List/TextBox/Alert đang hiển thị
   void Function()? onScreen;
   Timer? _alertT;
 
   void setCurrent(JObject o) {
     if (o.cls.isSubOf(vm.loadClass('javax/microedition/lcdui/Canvas'))) {
-      screen = null;
+      form = null;
       onScreen?.call();
       if (!identical(canvas, o)) {
         canvas = o;
@@ -92,21 +92,21 @@ class Midp {
       }
       repaintReq = true;
     } else {
-      screen = o;
+      form = o;
       onScreen?.call();
       if (o.cls.name == 'javax/microedition/lcdui/Alert') {
         final to = (o.f['\$timeout'] ?? 2000) as int;
         _alertT?.cancel();
-        if (to > 0) _alertT = Timer(Duration(milliseconds: to), () { if (identical(screen, o)) dismissAlert(); });
+        if (to > 0) _alertT = Timer(Duration(milliseconds: to), () { if (identical(form, o)) dismissAlert(); });
       }
     }
   }
 
   void dismissAlert() {
-    final o = screen;
+    final o = form;
     if (o == null) return;
     final next = o.f['\$next'];
-    screen = null;
+    form = null;
     onScreen?.call();
     if (next != null) setCurrent(next as JObject);
     repaintReq = true;
@@ -114,7 +114,7 @@ class Midp {
 
   /// Người dùng bấm một lệnh (Command) trên màn hình Form/List/TextBox.
   void fireCommand(JObject cmd) {
-    final o = screen;
+    final o = form;
     if (o == null) return;
     final l = o.f['\$cl'];
     if (l != null) {
@@ -125,7 +125,7 @@ class Midp {
   }
 
   void selectListItem(int idx) {
-    final o = screen;
+    final o = form;
     if (o == null) return;
     o.f['\$sel'] = idx;
     final c = vm.loadClass('javax/microedition/lcdui/List').statics['SELECT_COMMAND'];
@@ -660,7 +660,7 @@ class Midp {
       setCur(v, a[1]);
       return null;
     });
-    vm.reg(DP, 'getCurrent', '()Ljavax/microedition/lcdui/Displayable;', (v, t, a) => screen ?? canvas);
+    vm.reg(DP, 'getCurrent', '()Ljavax/microedition/lcdui/Displayable;', (v, t, a) => form ?? canvas);
     vm.reg(DP, 'getBestImageWidth', '(I)I', (v, t, a) => 32);
     vm.reg(DP, 'getBestImageHeight', '(I)I', (v, t, a) => 32);
     vm.reg(DP, 'getColor', '(I)I', (v, t, a) => i(a, 1) == 1 || i(a, 1) == 3 ? 0 : 0xFFFFFF);

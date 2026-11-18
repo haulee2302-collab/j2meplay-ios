@@ -15,7 +15,7 @@ class MidpScreenView extends StatefulWidget {
 
 class _MidpScreenViewState extends State<MidpScreenView> {
   Midp get m => widget.midp;
-  JObject get o => m.screen!;
+  JObject get o => m.form!;
   String str(dynamic x) => x == null ? '' : ((x as JObject).native as String? ?? '');
   String? _key;
   final Map<Object, TextEditingController> _ctl = {};
@@ -98,7 +98,7 @@ class _MidpScreenViewState extends State<MidpScreenView> {
 
   @override
   Widget build(BuildContext context) {
-    if (m.screen == null) return const SizedBox.shrink();
+    if (m.form == null) return const SizedBox.shrink();
     final k = '${identityHashCode(o)}';
     if (_key != k) {
       _key = k;

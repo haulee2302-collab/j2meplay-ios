@@ -187,7 +187,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                                   Text(s.status, textAlign: TextAlign.center, style: TextStyle(color: s.error ? Jp.danger : const Color(0xFF1769D9), fontSize: 13, fontWeight: FontWeight.w600)),
                                 ]),
                               ),
-                            if (s.midp?.screen != null) Positioned.fill(child: MidpScreenView(midp: s.midp!)),
+                            if (s.midp?.form != null) Positioned.fill(child: MidpScreenView(midp: s.midp!)),
                           ]);
                         }),
                       ),
