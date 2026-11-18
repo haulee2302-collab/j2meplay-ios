@@ -52,6 +52,10 @@ class UserJar {
   UserJar(this.id, this.name, this.size, this.createdAt);
 }
 
+class CaptchaRequired extends ApiError {
+  CaptchaRequired() : super('Vui lòng hoàn tất bước xác minh', 428);
+}
+
 class ApiError implements Exception {
   final String message;
   final int code;
@@ -67,12 +71,15 @@ class Api {
   Api._();
 
   String base = defaultBase;
+  String lastEmail = '';
+  Future<void> saveEmail(String e) async { lastEmail = e; final p = await SharedPreferences.getInstance(); await p.setString('lastEmail', e); }
   String? token;
   User? user;
 
   Future<void> load() async {
     final p = await SharedPreferences.getInstance();
     token = p.getString('auth_token');
+    lastEmail = p.getString('lastEmail') ?? '';
     final b = p.getString('server_base_url');
     if (b != null && b.isNotEmpty) base = b.trim().replaceAll(RegExp(r'/+$'), '');
   }
@@ -122,9 +129,8 @@ class Api {
     throw ApiError(msg is String && msg.isNotEmpty ? msg : '$fallback (mã $code)', code);
   }
 
-  Future<User> login(String email, String pass) async {
-    final (code, json, res) = await _send('POST', '/api/site/login',
-        {'email': email, 'password': pass, 'rememberLogin': true, 'turnstileToken': ''});
+  Future<User> _auth(String path, Map<String, dynamic> body, String fallback) async {
+    final (code, json, res) = await _send('POST', path, body);
     if (code >= 200 && code < 300 && json != null) {
       var t = '${json['token'] ?? ''}';
       if (t.isEmpty) {
@@ -137,11 +143,36 @@ class Api {
       user = User.from(json['user'] as Map<String, dynamic>);
       return user!;
     }
-    if (code == 428 && json?['captchaRequired'] == true) {
-      throw ApiError('Máy chủ yêu cầu xác minh captcha. Hãy đăng nhập một lần trên j2meplay.com rồi thử lại.');
-    }
+    if (code == 428 && json?['captchaRequired'] == true) throw CaptchaRequired();
     final msg = json?['error'];
-    throw ApiError(msg is String && msg.isNotEmpty ? msg : 'Đăng nhập thất bại (mã $code)', code);
+    throw ApiError(msg is String && msg.isNotEmpty ? msg : '$fallback (mã $code)', code);
+  }
+
+  Future<User> login(String email, String pass, [String captcha = '']) =>
+      _auth('/api/site/login', {'email': email, 'password': pass, 'rememberLogin': true, 'turnstileToken': captcha}, 'Đăng nhập thất bại');
+
+  Future<User> loginGoogle(String idToken, [String captcha = '']) => _auth(
+      '/api/site/google', {'credential': idToken, 'rememberLogin': true, 'acceptedTerms': true, 'turnstileToken': captcha}, 'Đăng nhập Google thất bại');
+
+  /// Client ID Google (loại Web) mà web đang dùng; rỗng = chưa bật đăng nhập Google.
+  Future<String> googleClientId() async {
+    final (_, j, _) = await _send('GET', '/api/site/auth-config');
+    return '${j?['googleClientId'] ?? ''}';
+  }
+
+  /// Đăng ký bằng email. Thành công → máy chủ gửi email xác minh.
+  Future<void> register(String email, String pass, String confirm, [String captcha = '']) async {
+    final (code, json, _) = await _send('POST', '/api/site/register',
+        {'email': email, 'password': pass, 'passwordConfirmation': confirm, 'acceptedTerms': true, 'turnstileToken': captcha});
+    if (code >= 200 && code < 300) return;
+    if (code == 428 && json?['captchaRequired'] == true) throw CaptchaRequired();
+    final msg = json?['error'];
+    throw ApiError(msg is String && msg.isNotEmpty ? msg : 'Đăng ký thất bại (mã $code)', code);
+  }
+
+  Future<String> resendVerification(String email) async {
+    final j = await _ok('POST', '/api/site/resend-verification', {'email': email}, 'Không gửi lại được email');
+    return '${j['message'] ?? ''}';
   }
 
   Future<User> me() async {

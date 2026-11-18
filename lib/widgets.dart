@@ -171,3 +171,163 @@ Future<bool> confirmDialog(BuildContext context, String title, String body, {Str
   );
   return r == true;
 }
+
+/// Ô nhập có nhãn trên, icon trái, nút hiện/ẩn mật khẩu (giống JpField của Android).
+class JpField extends StatefulWidget {
+  final String label, placeholder;
+  final TextEditingController controller;
+  final IconData icon;
+  final bool password;
+  final TextInputType keyboard;
+  final TextInputAction action;
+  final VoidCallback? onSubmit;
+  const JpField(this.label, this.controller, this.icon,
+      {super.key, this.placeholder = '', this.password = false, this.keyboard = TextInputType.text, this.action = TextInputAction.next, this.onSubmit});
+  @override
+  State<JpField> createState() => _JpFieldState();
+}
+
+class _JpFieldState extends State<JpField> {
+  bool visible = false;
+  @override
+  Widget build(BuildContext context) {
+    OutlineInputBorder b(Color c, [double w = 1]) => OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c, width: w));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(widget.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Jp.primaryDark))),
+      TextField(
+        controller: widget.controller,
+        obscureText: widget.password && !visible,
+        keyboardType: widget.keyboard,
+        textInputAction: widget.action,
+        autocorrect: false,
+        enableSuggestions: !widget.password,
+        onSubmitted: (_) => widget.onSubmit?.call(),
+        style: TextStyle(fontSize: 15, color: Jp.text),
+        decoration: InputDecoration(
+          hintText: widget.placeholder,
+          hintStyle: TextStyle(color: Jp.muted, fontSize: 15),
+          prefixIcon: Icon(widget.icon, size: 20, color: Jp.muted),
+          suffixIcon: widget.password
+              ? IconButton(icon: Icon(visible ? Icons.visibility : Icons.visibility_outlined, size: 20, color: visible ? Jp.primary : Jp.muted), onPressed: () => setState(() => visible = !visible))
+              : null,
+          filled: true,
+          fillColor: Jp.surface,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          border: b(Jp.line),
+          enabledBorder: b(Jp.line),
+          focusedBorder: b(Jp.primary, 1.5),
+        ),
+      ),
+    ]);
+  }
+}
+
+class MessageBanner extends StatelessWidget {
+  final String text;
+  final bool error;
+  const MessageBanner(this.text, {super.key, this.error = true});
+  @override
+  Widget build(BuildContext context) {
+    final c = error ? Jp.danger : Jp.success;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: c.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: c.withOpacity(0.3))),
+      child: Text(text, style: TextStyle(color: c, fontSize: 13)),
+    );
+  }
+}
+
+class OrDivider extends StatelessWidget {
+  const OrDivider({super.key});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(children: [
+          Expanded(child: Divider(color: Jp.line)),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text('hoặc', style: TextStyle(color: Jp.muted, fontSize: 12))),
+          Expanded(child: Divider(color: Jp.line)),
+        ]),
+      );
+}
+
+class _GLogo extends CustomPainter {
+  @override
+  void paint(Canvas c, Size s) {
+    final k = s.width / 24;
+    c.scale(k);
+    void p(int col, String d) => c.drawPath(_parse(d), Paint()..color = Color(col));
+    p(0xFF4285F4, 'M20.5 12.2c0-.7-.1-1.4-.2-2H12v3.7h4.8a4.1 4.1 0 0 1-1.8 2.7v2.3h3c1.8-1.6 2.5-4 2.5-6.7Z');
+    p(0xFF34A853, 'M12 21c2.4 0 4.5-.8 6-2.1l-3-2.3c-.8.6-1.9.9-3 .9-2.3 0-4.3-1.6-5-3.7H4v2.4A9 9 0 0 0 12 21Z');
+    p(0xFFFBBC05, 'M7 13.8a5.4 5.4 0 0 1 0-3.6V7.8H4a9 9 0 0 0 0 8.4l3-2.4Z');
+    p(0xFFEA4335, 'M12 6.5c1.3 0 2.5.5 3.5 1.4L18.1 5A8.7 8.7 0 0 0 4 7.8l3 2.4c.7-2.1 2.7-3.7 5-3.7Z');
+  }
+
+  // Bộ phân tích path tối giản cho M/m c/C h/H v/V a/A l/L z (A xấp xỉ bằng đường thẳng).
+  Path _parse(String d) {
+    final path = Path();
+    final t = RegExp(r'[a-zA-Z]|-?\d*\.?\d+').allMatches(d).map((m) => m.group(0)!).toList();
+    var i = 0, x = 0.0, y = 0.0;
+    String cmd = 'M';
+    double n() => double.parse(t[i++]);
+    while (i < t.length) {
+      if (RegExp(r'[a-zA-Z]').hasMatch(t[i])) cmd = t[i++];
+      final rel = cmd == cmd.toLowerCase();
+      switch (cmd.toLowerCase()) {
+        case 'm': { final a = n(), b = n(); x = rel ? x + a : a; y = rel ? y + b : b; path.moveTo(x, y); cmd = rel ? 'l' : 'L'; break; }
+        case 'l': { final a = n(), b = n(); x = rel ? x + a : a; y = rel ? y + b : b; path.lineTo(x, y); break; }
+        case 'h': { final a = n(); x = rel ? x + a : a; path.lineTo(x, y); break; }
+        case 'v': { final a = n(); y = rel ? y + a : a; path.lineTo(x, y); break; }
+        case 'c': {
+          final v = List.generate(6, (_) => n());
+          final ox = rel ? x : 0.0, oy = rel ? y : 0.0;
+          path.cubicTo(ox + v[0], oy + v[1], ox + v[2], oy + v[3], ox + v[4], oy + v[5]);
+          x = ox + v[4]; y = oy + v[5];
+          break;
+        }
+        case 'a': {
+          final v = List.generate(7, (_) => n());
+          final nx = rel ? x + v[5] : v[5], ny = rel ? y + v[6] : v[6];
+          path.arcToPoint(Offset(nx, ny), radius: Radius.circular(v[0]), largeArc: v[3] == 1, clockwise: v[4] == 1);
+          x = nx; y = ny;
+          break;
+        }
+        case 'z': path.close(); break;
+        default: i++;
+      }
+    }
+    return path;
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+class GoogleButton extends StatelessWidget {
+  final String text;
+  final VoidCallback? onTap;
+  final bool loading;
+  const GoogleButton(this.text, this.onTap, {super.key, this.loading = false});
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: OutlinedButton(
+          onPressed: loading ? null : onTap,
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Jp.surface,
+            foregroundColor: Jp.text,
+            side: BorderSide(color: Jp.line),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: loading
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Jp.primary))
+              : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  CustomPaint(size: const Size(20, 20), painter: _GLogo()),
+                  const SizedBox(width: 10),
+                  Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ]),
+        ),
+      );
+}

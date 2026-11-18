@@ -25,8 +25,22 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Cấu hình Google Sign-In (nếu có GOOGLE_IOS_CLIENT_ID)
+        env:
+          GID: ${{ vars.GOOGLE_IOS_CLIENT_ID }}
+        run: |
+          if [ -n "$GID" ]; then
+            REV="com.googleusercontent.apps.${GID%%.apps.googleusercontent.com}"
+            P=ios/Runner/Info.plist
+            /usr/libexec/PlistBuddy -c "Add :GIDClientID string $GID" $P || true
+            /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" $P || true
+            /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" $P || true
+            /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" $P || true
+            /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string $REV" $P || true
+          fi
+
       - name: Build (không ký)
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --dart-define=GOOGLE_IOS_CLIENT_ID=${{ vars.GOOGLE_IOS_CLIENT_ID }}
 
       - name: Đóng gói IPA chưa ký
         run: |
