@@ -6,8 +6,18 @@ class Jp {
   static final ValueNotifier<bool> darkNotifier = ValueNotifier(false);
   static bool get dark => darkNotifier.value;
 
+  /// Làm mịn hình ảnh game (lọc song tuyến khi phóng); mặc định tắt cho nét pixel.
+  static final ValueNotifier<bool> smooth = ValueNotifier(false);
+  static FilterQuality get fq => smooth.value ? FilterQuality.medium : FilterQuality.none;
+  static Future<void> setSmooth(bool v) async {
+    smooth.value = v;
+    final p = await SharedPreferences.getInstance();
+    await p.setBool('smooth', v);
+  }
+
   static Future<void> load() async {
     final p = await SharedPreferences.getInstance();
+    smooth.value = p.getBool('smooth') ?? false;
     darkNotifier.value = p.getBool('dark') ?? false;
   }
 

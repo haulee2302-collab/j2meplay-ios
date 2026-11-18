@@ -191,7 +191,7 @@ class _FloatViewState extends State<_FloatView> {
                       onPointerMove: (e) => touch('move', e.localPosition),
                       onPointerUp: (e) => touch('up', e.localPosition),
                       onPointerCancel: (e) => touch('up', e.localPosition),
-                      child: RawImage(image: c.image, fit: BoxFit.fill, filterQuality: FilterQuality.none),
+                      child: RawImage(image: c.image, fit: BoxFit.fill, filterQuality: Jp.fq),
                     ),
                   if (!c.firstFrame || native)
                     GestureDetector(

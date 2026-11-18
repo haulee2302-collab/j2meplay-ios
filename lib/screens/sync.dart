@@ -168,7 +168,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
                   onPointerMove: (e) => _touch(t, 'move', e.localPosition, size),
                   onPointerUp: (e) => _touch(t, 'up', e.localPosition, size),
                   onPointerCancel: (e) => _touch(t, 'up', e.localPosition, size),
-                  child: RawImage(image: c.image, fit: BoxFit.fill, filterQuality: FilterQuality.none),
+                  child: RawImage(image: c.image, fit: BoxFit.fill, filterQuality: Jp.fq),
                 ),
               if (main && native && rt != null && !c.jarBlocked) Positioned.fill(child: MidpOverlay(runtime: rt, conn: c, onError: (m) => _toast(m)))
               else if (!live || native || c.noGame || c.jarBlocked)
@@ -239,7 +239,11 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _mainCard(_Tile t, double width) {
+  Widget _mainCard(_Tile t, double fullWidth, double maxH) {
+    final ratio = t.w / (t.h < 1 ? 1 : t.h);
+    final avail = maxH - 12 - (mainKeypad ? 150 : 0);
+    final sw = (fullWidth - 50).clamp(60.0, (avail * ratio).clamp(60.0, 4000.0));
+    final width = sw + 6 + 4 + 44;
     Widget action(String k, JpIconData icon) => InkWell(
           onTap: () {
             switch (k) {
@@ -362,6 +366,8 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
                   _switchRow('Điều khiển màn nhỏ', controlSmall, (v) { setState(() => controlSmall = v); _save(); }),
                   const SizedBox(height: 8),
                   _switchRow('Hiển thị thông tin', showInfo, (v) { setState(() => showInfo = v); _save(); }),
+                  const SizedBox(height: 8),
+                  _switchRow('Làm mịn hình ảnh', Jp.smooth.value, (v) { Jp.setSmooth(v); setState(() {}); }),
                   const SizedBox(height: 10),
                   _sideBtn('Tải lại', () { for (final t in tiles) { t.conn.reload(); } setState(() => sidebar = false); }),
                   const SizedBox(height: 10),
@@ -455,7 +461,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
               child: SafeArea(
                 child: Align(
                   alignment: Alignment.center,
-                  child: Transform.translate(offset: floatDelta, child: FittedBox(fit: BoxFit.scaleDown, child: _mainCard(mainTile.first, screenW - 10))),
+                  child: Transform.translate(offset: floatDelta, child: _mainCard(mainTile.first, screenW - 10, MediaQuery.of(context).size.height - topInset(context) - 70 - MediaQuery.of(context).padding.bottom)),
                 ),
               ),
             ),
