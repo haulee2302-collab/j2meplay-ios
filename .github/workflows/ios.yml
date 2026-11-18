@@ -42,6 +42,9 @@ jobs:
             /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string $REV" $P || true
           fi
 
+      - name: Phân tích Dart
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | grep -E "error|Analyzing|issues" | head -60 || true
+
       - name: Build (không ký)
         run: flutter build ios --release --no-codesign --dart-define=GOOGLE_IOS_CLIENT_ID=${{ vars.GOOGLE_IOS_CLIENT_ID }}
 
