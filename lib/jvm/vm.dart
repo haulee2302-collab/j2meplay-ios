@@ -354,6 +354,16 @@ class Vm {
   }
 
   JMethod? _lastNat;
+
+  String _trace(JThread t) {
+    final b = StringBuffer();
+    var n = 0;
+    for (var k = t.frames.length - 1; k >= 0 && n < 6; k--, n++) {
+      final f = t.frames[k];
+      b.write('${f.m.cls.name}.${f.m.name}${f.m.desc}@${f.pc} ');
+    }
+    return b.toString();
+  }
   JThread? currentThread;
 
   // ---------------- gọi đồng bộ (cho native gọi lại Java) ----------------
@@ -1261,7 +1271,7 @@ class Vm {
         continue outer;
       } on TypeError catch (e) {
         f.pc = opPc;
-        _throw(t, ex('java/lang/Error', 'Lỗi kiểu trong VM: $e (native ${_lastNat?.cls.name}.${_lastNat?.name}${_lastNat?.desc}; hàm ${t.frames.isNotEmpty ? '${t.frames.last.m.cls.name}.${t.frames.last.m.name}' : '?'})').obj, base);
+        _throw(t, ex('java/lang/Error', 'Lỗi kiểu trong VM: $e (native ${_lastNat?.cls.name}.${_lastNat?.name}${_lastNat?.desc}; tại ${_trace(t)})').obj, base);
         continue outer;
       }
     }
