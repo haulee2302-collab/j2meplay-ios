@@ -13,6 +13,7 @@ import '../game/keypad.dart';
 import '../game/midp.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'floating.dart';
 import 'rental_dialogs.dart';
 
 Color get _pageBg => Jp.dark ? const Color(0xFF0F0F1A) : const Color(0xFFEEF6FF);
@@ -285,6 +286,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Jp.line), boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))]),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      _toolItem('Cửa sổ nổi', JpIcons.toolExpand, () { Floating.open(rental); Navigator.pop(context); }),
                       _toolItem('Tải lại màn hình', JpIcons.refresh, () => conn.reload()),
                       _toolItem('Khởi động lại', JpIcons.restart2, () => _action('restart')),
                       _toolItem('Proxy', JpIcons.globe, () => _action('proxy')),

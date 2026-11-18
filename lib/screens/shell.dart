@@ -81,13 +81,19 @@ class _MainShellState extends State<MainShell> {
         highlightColor: Colors.transparent,
         onTap: _deposit,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Container(
-            width: 44, height: 44, alignment: Alignment.center,
-            decoration: BoxDecoration(color: Jp.primary.withOpacity(0.22), shape: BoxShape.circle),
-            child: Container(
-              width: 40, height: 40, alignment: Alignment.center,
-              decoration: BoxDecoration(color: Jp.surface, shape: BoxShape.circle),
-              child: Container(width: 34, height: 34, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle), child: const JpIcon(JpIcons.navDollar, color: Colors.white, size: 18)),
+          SizedBox(
+            height: 36, width: 56,
+            child: OverflowBox(
+              maxHeight: 64, maxWidth: 64, alignment: Alignment.bottomCenter,
+              child: Container(
+                width: 60, height: 60, alignment: Alignment.center,
+                decoration: BoxDecoration(color: Jp.primary.withOpacity(0.22), shape: BoxShape.circle),
+                child: Container(
+                  width: 52, height: 52, alignment: Alignment.center,
+                  decoration: BoxDecoration(color: Jp.surface, shape: BoxShape.circle),
+                  child: Container(width: 44, height: 44, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle), child: const JpIcon(JpIcons.navDollar, color: Colors.white, size: 24)),
+                ),
+              ),
             ),
           ),
           const Text('Nạp tiền', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Jp.primary)),
