@@ -240,8 +240,6 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
   }
 
   Widget _mainCard(_Tile t, double width) {
-    const rl = BorderRadius.only(topLeft: Radius.circular(10), bottomLeft: Radius.circular(10));
-    const rr = BorderRadius.only(topRight: Radius.circular(10), bottomRight: Radius.circular(10));
     Widget action(String k, JpIconData icon) => InkWell(
           onTap: () {
             switch (k) {
@@ -256,11 +254,10 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
         );
     return SizedBox(
       width: width,
-      child: IntrinsicHeight(
-        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             child: Container(
-              decoration: BoxDecoration(color: Jp.surface, borderRadius: rl, border: Border.all(color: Jp.line)),
+              decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: Jp.line)),
               clipBehavior: Clip.antiAlias,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Padding(padding: const EdgeInsets.all(3), child: _screen(t, main: true)),
@@ -270,7 +267,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
           ),
           Container(
             width: 44,
-            decoration: BoxDecoration(color: Jp.surface, borderRadius: rr, border: Border.all(color: Jp.lineStrong)),
+            decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: Jp.lineStrong)),
             clipBehavior: Clip.antiAlias,
             child: Column(children: [
               GestureDetector(
@@ -301,7 +298,6 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
             ]),
           ),
         ]),
-      ),
     );
   }
 
@@ -441,7 +437,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(5),
-                child: Wrap(spacing: 4, runSpacing: 4, alignment: WrapAlignment.start, crossAxisAlignment: WrapCrossAlignment.start, children: [
+                child: SizedBox(width: double.infinity, child: Wrap(spacing: 4, runSpacing: 4, alignment: WrapAlignment.start, crossAxisAlignment: WrapCrossAlignment.start, children: [
                   if (tiles.isEmpty) Padding(padding: const EdgeInsets.all(12), child: Text('Chưa có phiên J2ME đang hoạt động để xem.', style: TextStyle(fontSize: 12, color: _mutedC))),
                   for (final t in tiles)
                     if (t.id != mainId && (!selectedOnly || selected.contains(t.id))) _small(t, smallW),

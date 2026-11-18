@@ -134,10 +134,13 @@ class _RentalsScreenState extends State<RentalsScreen> {
     final tl = box.localToGlobal(Offset.zero, ancestor: overlay);
     final size = overlay.size;
     const menuW = 190.0;
-    var left = tl.dx;
-    if (left + menuW > size.width - 6) left = tl.dx + box.size.width - menuW;
+    final menuH = (off ? 4 : 7) * 42.0 + 16;
+    var left = tl.dx + box.size.width + 12 - menuW;
     left = left.clamp(6.0, size.width - menuW - 6);
-    final position = RelativeRect.fromLTRB(left, tl.dy + box.size.height + 6, size.width - left - menuW, 0);
+    final below = tl.dy + box.size.height + 6;
+    final bottomPad = MediaQuery.of(context).padding.bottom + 66;
+    final top = below + menuH > size.height - bottomPad ? (tl.dy - 6 - menuH).clamp(6.0, size.height) : below;
+    final position = RelativeRect.fromLTRB(left, top, size.width - left - menuW, 0);
     PopupMenuItem<String> item(String v, JpIconData icon, String text, {bool enabled = true, bool danger = false}) => PopupMenuItem<String>(
           value: v,
           enabled: enabled,
@@ -232,7 +235,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
             ]),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Row(children: [
               Text('Phiên J2ME của bạn', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Jp.text)),
               if (rentals.isNotEmpty) ...[
@@ -248,7 +251,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
           ),
           if (rentals.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
               child: SizedBox(
                 width: double.infinity,
                 child: PrimaryButton('Xem tất cả (${viewable.length})', viewable.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => SyncScreen(rentals: viewable))),

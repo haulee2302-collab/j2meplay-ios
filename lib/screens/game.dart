@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as m;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../icons.dart';
@@ -348,11 +349,11 @@ class SharedPrefsLite {
   static Future<void> save(bool v) async => (await SharedPreferences.getInstance()).setBool('keypad', v);
 }
 
-// ---------------- Chọn JAR ----------------
+// ---------------- Chọn JAR (giống JarSheet của Android) ----------------
 class _JarItem {
-  final String source, id, name;
+  final String source, id, name, icon;
   final int size;
-  _JarItem(this.source, this.id, this.name, this.size);
+  _JarItem(this.source, this.id, this.name, this.size, [this.icon = '']);
 }
 
 List<_JarItem> _items(dynamic arr, String? source) {
@@ -360,7 +361,7 @@ List<_JarItem> _items(dynamic arr, String? source) {
   return [
     for (final o in arr)
       if (o is Map)
-        _JarItem(source ?? '${o['source'] ?? 'server'}', o['id'] == null ? '' : '${o['id']}', '${o['name'] ?? ''}', ((o['size'] ?? 0) as num).toInt())
+        _JarItem(source ?? '${o['source'] ?? 'server'}', o['id'] == null ? '' : '${o['id']}', '${o['name'] ?? ''}', ((o['size'] ?? 0) as num).toInt(), '${o['iconDataUrl'] ?? ''}')
   ];
 }
 
@@ -375,6 +376,7 @@ class JarSheet extends StatefulWidget {
 class _JarSheetState extends State<JarSheet> {
   int tab = 0;
   List<_JarItem> system = [], mine = [];
+  String mineInfo = '';
   bool loading = true;
   String? busy, error;
 
@@ -385,10 +387,11 @@ class _JarSheetState extends State<JarSheet> {
   }
 
   Future<void> _load() async {
+    setState(() { loading = true; error = null; });
     final api = Api.instance;
     final a = widget.conn.access;
     final (_, sys, _) = await api.rawGet('/api/site/system-jars');
-    final (_, mj, _) = await api.rawGet('/api/site/jars');
+    final (mc, mj, _) = await api.rawGet('/api/site/jars');
     Map<String, dynamic>? lib;
     if (a != null) {
       lib = (await widget.conn.sessionRequest(a, 'GET', '/api/public-session/library?id=${Uri.encodeQueryComponent(a.sessionId)}')).$2;
@@ -397,9 +400,13 @@ class _JarSheetState extends State<JarSheet> {
     final seen = direct.map((e) => 'system:${e.id.isEmpty ? e.name : e.id}').toSet();
     final extra = _items(lib?['server'], null).where((e) => seen.add('${e.source}:${e.id.isEmpty ? e.name : e.id}'));
     if (!mounted) return;
+    int n(dynamic v) => v is num ? v.toInt() : 0;
     setState(() {
       system = [...direct, ...extra];
       mine = _items(mj?['jars'], 'mine');
+      mineInfo = (mc >= 200 && mc < 300 && mj != null)
+          ? '${fmtSize(n(mj['usedBytes']))} / ${fmtSize(n(mj['quotaBytes']))} · còn ${fmtSize(n(mj['freeBytes']))}'
+          : '${mj?['error'] ?? ''}';
       loading = false;
     });
   }
@@ -431,40 +438,163 @@ class _JarSheetState extends State<JarSheet> {
     }
   }
 
+  Future<void> _upload() async {
+    final a = widget.conn.access;
+    if (a == null) { setState(() => error = 'Phiên J2ME chưa sẵn sàng.'); return; }
+    final r = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+    final f = r?.files.single;
+    if (f == null || f.bytes == null) return;
+    if (!f.name.toLowerCase().endsWith('.jar')) { setState(() => error = 'Chỉ chấp nhận tệp .JAR'); return; }
+    setState(() { busy = 'Đang tải ${f.name} lên…'; error = null; });
+    Map<String, dynamic>? jar;
+    var (c, j) = await widget.conn.sessionRequest(a, 'POST',
+        '/api/public-session/upload?id=${Uri.encodeQueryComponent(a.sessionId)}&filename=${Uri.encodeQueryComponent(f.name)}',
+        body: f.bytes!, contentType: 'application/java-archive', timeoutMs: 180000);
+    jar = j?['jar'] is Map ? Map<String, dynamic>.from(j!['jar']) : null;
+    if (!(c >= 200 && c < 300) || jar == null) {
+      if (![0, 404, 405, 409, 502, 503].contains(c)) {
+        if (mounted) setState(() { busy = null; error = '${j?['error'] ?? ''}'.isEmpty ? 'Tải JAR thất bại' : '${j!['error']}'; });
+        return;
+      }
+      try {
+        final u = await Api.instance.uploadJar(f.name, f.bytes!);
+        jar = u['jar'] is Map ? Map<String, dynamic>.from(u['jar']) : null;
+      } on ApiError catch (e) {
+        if (mounted) setState(() { busy = null; error = e.message; });
+        return;
+      }
+    }
+    if (jar == null) { if (mounted) setState(() { busy = null; error = 'Tải JAR thất bại'; }); return; }
+    if (!mounted) return;
+    setState(() => busy = null);
+    _select(_JarItem('${jar['source'] ?? 'mine'}', jar['id'] == null ? '' : '${jar['id']}', '${jar['name'] ?? f.name}', ((jar['size'] ?? 0) as num).toInt(), '${jar['iconDataUrl'] ?? ''}'));
+  }
+
+  Future<void> _delete(_JarItem it) async {
+    final ok = await confirmDialog(context, 'Xóa JAR?', 'Xóa "${it.name}" khỏi Kho của bạn? Không thể hoàn tác.', ok: 'Xóa', danger: true);
+    if (!ok || !mounted) return;
+    setState(() { busy = 'Đang xóa ${it.name}…'; error = null; });
+    try {
+      await Api.instance.deleteJar(it.id);
+      await _load();
+    } on ApiError catch (e) {
+      if (mounted) setState(() => error = e.message);
+    }
+    if (mounted) setState(() => busy = null);
+  }
+
+  Widget _icon(_JarItem it) {
+    final i = it.icon.indexOf('base64,');
+    if (i >= 0) {
+      try {
+        return Image.memory(base64Decode(it.icon.substring(i + 7)), width: 36, height: 36, filterQuality: FilterQuality.none, fit: BoxFit.contain);
+      } catch (_) {}
+    }
+    return Container(width: 36, height: 36, decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(8)), alignment: Alignment.center, child: const JpIcon(JpIcons.gamepad, size: 20, color: Jp.primary));
+  }
+
+  Widget _tab(String text, int i) => Expanded(
+        child: InkWell(
+          onTap: () => setState(() => tab = i),
+          child: Container(
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tab == i ? Jp.primary : Colors.transparent, width: 2))),
+            child: Text(text, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: tab == i ? Jp.primary : Jp.muted)),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final list = tab == 0 ? system : mine;
     return SafeArea(
       child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Column(children: [
-          const SizedBox(height: 10),
-          Row(children: [
-            const SizedBox(width: 12),
-            for (final (i, t) in ['Hệ thống', 'Kho của tôi'].indexed)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(label: Text(t), selected: tab == i, onSelected: (_) => setState(() => tab = i)),
+        height: MediaQuery.of(context).size.height * 0.8,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text('Chọn game JAR', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: Jp.text))),
+              SizedBox(
+                height: 32,
+                child: OutlinedButton.icon(
+                  onPressed: busy == null ? _upload : null,
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), side: BorderSide(color: Jp.lineStrong), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                  icon: const JpIcon(JpIcons.add, size: 14, color: Jp.primary),
+                  label: const Text('Tải JAR lên', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Jp.primary)),
+                ),
               ),
-          ]),
-          if (error != null) Padding(padding: const EdgeInsets.all(10), child: Text(error!, style: const TextStyle(color: Jp.danger))),
-          if (busy != null) Padding(padding: const EdgeInsets.all(10), child: Text(busy!, style: TextStyle(color: Jp.muted))),
-          Expanded(
-            child: loading
-                ? const Center(child: CircularProgressIndicator(color: Jp.primary))
-                : list.isEmpty
-                    ? Center(child: Text('Chưa có JAR nào', style: TextStyle(color: Jp.muted)))
-                    : ListView.builder(
-                        itemCount: list.length,
-                        itemBuilder: (_, i) => ListTile(
-                          enabled: busy == null,
-                          title: Text(list[i].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Jp.text)),
-                          subtitle: list[i].size > 0 ? Text('${(list[i].size / 1024).round()} KB', style: TextStyle(color: Jp.muted)) : null,
-                          onTap: () => _select(list[i]),
+            ]),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Jp.line))),
+              child: Row(children: [_tab('Kho hệ thống (${system.length})', 0), _tab('Kho của tôi (${mine.length})', 1)]),
+            ),
+            if (tab == 1 && mineInfo.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(mineInfo, style: TextStyle(fontSize: 12, color: Jp.muted))),
+            if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: const TextStyle(fontSize: 13, color: Jp.danger))),
+            if (busy != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Jp.primary)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(busy!, style: TextStyle(fontSize: 13, color: Jp.text))),
+                ]),
+              ),
+            Expanded(
+              child: loading
+                  ? const Center(child: CircularProgressIndicator(color: Jp.primary))
+                  : list.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Text(tab == 1 ? 'Kho của bạn chưa có JAR. Bấm "Tải JAR lên" để thêm.' : 'Kho hệ thống chưa có JAR.', style: TextStyle(fontSize: 14, color: Jp.muted)),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.only(top: 8, bottom: 8),
+                          itemCount: list.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 6),
+                          itemBuilder: (_, i) {
+                            final it = list[i];
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: busy == null ? () => _select(it) : null,
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: Jp.line)),
+                                child: Row(children: [
+                                  _icon(it),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    Text(it.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Jp.text)),
+                                    if (it.size > 0) Text(fmtSize(it.size), style: TextStyle(fontSize: 12, color: Jp.muted)),
+                                  ])),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    height: 30,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    decoration: BoxDecoration(border: Border.all(color: Jp.lineStrong), borderRadius: BorderRadius.circular(8)),
+                                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                                      JpIcon(JpIcons.play, size: 14, color: Jp.primary),
+                                      SizedBox(width: 4),
+                                      Text('Chạy', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Jp.primary)),
+                                    ]),
+                                  ),
+                                  if (it.source == 'mine' && it.id.isNotEmpty) ...[
+                                    const SizedBox(width: 6),
+                                    GestureDetector(
+                                      onTap: busy == null ? () => _delete(it) : null,
+                                      child: Container(width: 30, height: 30, decoration: BoxDecoration(color: Jp.danger, borderRadius: BorderRadius.circular(8)), alignment: Alignment.center, child: const JpIcon(JpIcons.trash, size: 16, color: Colors.white)),
+                                    ),
+                                  ],
+                                ]),
+                              ),
+                            );
+                          },
                         ),
-                      ),
-          ),
-        ]),
+            ),
+          ]),
+        ),
       ),
     );
   }

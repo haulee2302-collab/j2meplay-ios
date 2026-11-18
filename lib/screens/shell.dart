@@ -81,7 +81,15 @@ class _MainShellState extends State<MainShell> {
         highlightColor: Colors.transparent,
         onTap: _deposit,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Container(width: 36, height: 36, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle), child: const JpIcon(JpIcons.navDollar, color: Colors.white, size: 20)),
+          Container(
+            width: 44, height: 44, alignment: Alignment.center,
+            decoration: BoxDecoration(color: Jp.primary.withOpacity(0.22), shape: BoxShape.circle),
+            child: Container(
+              width: 40, height: 40, alignment: Alignment.center,
+              decoration: BoxDecoration(color: Jp.surface, shape: BoxShape.circle),
+              child: Container(width: 34, height: 34, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle), child: const JpIcon(JpIcons.navDollar, color: Colors.white, size: 18)),
+            ),
+          ),
           const Text('Nạp tiền', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Jp.primary)),
         ]),
       ),

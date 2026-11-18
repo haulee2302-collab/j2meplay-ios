@@ -101,7 +101,7 @@ class HeroHeader extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
         child: Stack(children: [
           Positioned(top: -50, right: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
-          Padding(padding: EdgeInsets.fromLTRB(20, topInset(context) + 8, 12, 20), child: child),
+          Padding(padding: EdgeInsets.fromLTRB(20, topInset(context) + 8 + 14, 12, 20 + 18), child: child),
         ]),
       ),
     );
@@ -354,7 +354,7 @@ class PageHead extends StatelessWidget {
         child: Stack(children: [
           Positioned(top: -50, right: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
           Padding(
-              padding: EdgeInsets.fromLTRB(20, topInset(context) + 8, 20, 20),
+              padding: EdgeInsets.fromLTRB(20, topInset(context) + 8 + 14, 20, 20 + 18),
               child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 131), child: Row(children: [
                 Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Padding(padding: const EdgeInsets.only(right: 40), child: Text(eyebrow, style: const TextStyle(color: Jp.highlight, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1))),
@@ -364,7 +364,7 @@ class PageHead extends StatelessWidget {
                 if (action != null) action!,
               ])),
           ),
-          Positioned(top: topInset(context) - 4, right: 4, child: const ThemeToggle()),
+          Positioned(top: topInset(context) + 8 + 14, right: 12, child: const ThemeToggle()),
         ]),
       ),
     );
