@@ -1,0 +1,40 @@
+name: Build iOS IPA (chưa ký)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # Dự án chỉ chứa mã Dart; thư mục ios/ được tạo ở đây nếu chưa có.
+      - name: Tạo khung iOS nếu chưa có
+        run: |
+          if [ ! -d ios ]; then
+            flutter create --platforms=ios --org com.j2meplay --project-name j2meplay .
+          fi
+
+      - run: flutter pub get
+
+      - name: Build (không ký)
+        run: flutter build ios --release --no-codesign
+
+      - name: Đóng gói IPA chưa ký
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/Runner.app
+          zip -qr J2MEPlay-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: J2MEPlay-unsigned-ipa
+          path: J2MEPlay-unsigned.ipa
