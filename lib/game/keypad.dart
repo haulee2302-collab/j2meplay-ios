@@ -78,40 +78,59 @@ class _KeypadState extends State<Keypad> {
     super.dispose();
   }
 
-  Widget _swap(VoidCallback onTap) => InkResponse(
+  Widget _swap(VoidCallback onTap) => GestureDetector(
         onTap: onTap,
-        radius: 16,
-        child: const SizedBox(width: 26, height: 26, child: JpIcon(JpIcons.swap, size: 16, color: Jp.primary)),
+        behavior: HitTestBehavior.opaque,
+        child: const SizedBox(width: 24, height: 24, child: Center(child: JpIcon(JpIcons.swap, size: 14, color: Jp.primary))),
       );
 
   @override
   Widget build(BuildContext context) {
     final t = widget.target;
     Widget key(String k, String label, {String sub = '', bool primary = false, JpIconData? icon, bool multi = false}) => Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(2.5),
-            child: _Hold(
-              onDown: () { if (multi) { _mt.tap(t, k); } else { _mt.flush(); t.key(k, 'down'); } },
-              onUp: () { if (!multi) t.key(k, 'up'); },
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: primary ? Jp.primary : Jp.primarySoft,
-                  borderRadius: BorderRadius.circular(8),
-                  border: primary ? null : Border.all(color: Jp.lineStrong),
-                ),
-                child: icon != null
-                    ? JpIcon(icon, size: 17, color: primary ? Colors.white : Jp.primary)
-                    : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: primary ? Colors.white : Jp.primary)),
-                        if (sub.isNotEmpty) ...[const SizedBox(width: 3), Text(sub, style: TextStyle(fontSize: 7, color: Jp.muted))],
-                      ]),
+          child: _Hold(
+            onDown: () { if (multi) { _mt.tap(t, k); } else { _mt.flush(); t.key(k, 'down'); } },
+            onUp: () { if (!multi) t.key(k, 'up'); },
+            builder: (pressed) => Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: primary ? (pressed ? Jp.primaryDark : Jp.primary) : (pressed ? Jp.primarySoft : _numBg),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: primary ? Jp.primary : _numLine),
               ),
+              child: icon != null
+                  ? JpIcon(icon, size: 18, color: primary ? Colors.white : Jp.primary)
+                  : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: primary ? 11 : 12, height: 1.1, color: primary ? Colors.white : Jp.primary)),
+                      if (sub.isNotEmpty) Text(sub, style: TextStyle(fontSize: 7, height: 1.1, fontWeight: FontWeight.w600, color: _numSub)),
+                    ]),
             ),
           ),
         );
 
-    Widget row(List<Widget> k) => Expanded(child: Row(children: k));
+    Widget row(List<Widget> k) => SizedBox(height: 30, child: Row(children: [
+          for (var i = 0; i < k.length; i++) ...[if (i > 0) const SizedBox(width: 5), k[i]],
+        ]));
+
+    Widget dkey(String k, {JpIconData? icon, String label = ''}) {
+      final ok = k == 'OK';
+      return _Hold(
+        onDown: () { _mt.flush(); t.key(k, 'down'); },
+        onUp: () => t.key(k, 'up'),
+        builder: (pressed) => Container(
+          width: 34, height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: ok ? (pressed ? Jp.primaryDark : Jp.primary) : (pressed ? Jp.primarySoft : Jp.surface),
+            borderRadius: BorderRadius.circular(10),
+            border: ok ? null : Border.all(color: Jp.lineStrong),
+          ),
+          child: icon != null
+              ? JpIcon(icon, size: icon == JpIcons.softKey ? 18 : 17, color: Jp.primary)
+              : Text(label, style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+        ),
+      );
+    }
 
     final left = numMode
         ? [
@@ -120,17 +139,17 @@ class _KeypadState extends State<Keypad> {
             row([for (final d in ['7', '8', '9']) key(d, d, sub: _subs[d]!, multi: true)]),
           ]
         : [
-            row([key('SOFT1', '', icon: JpIcons.chevronLeft), key('OK', 'OK', primary: true), key('SOFT2', '', icon: JpIcons.chevronRight)]),
+            row([key('SOFT1', '', icon: JpIcons.softKey), key('OK', 'OK', primary: true), key('SOFT2', '', icon: JpIcons.softKey)]),
             row([key('STAR', '*'), key('0', '0', sub: '␣', multi: true), key('HASH', '#')]),
           ];
 
-    final right = dpad
-        ? [
-            row([key('SOFT1', '', icon: JpIcons.dragHandle), key('UP', '', icon: JpIcons.chevronUp), key('SOFT2', '', icon: JpIcons.dragHandle)]),
-            row([key('LEFT', '', icon: JpIcons.chevronLeft), key('OK', 'OK', primary: true), key('RIGHT', '', icon: JpIcons.chevronRight)]),
-            row([key('BACK', '', icon: JpIcons.undo), key('DOWN', '', icon: JpIcons.chevronDown), key('BACKSPACE', '', icon: JpIcons.erase)]),
-          ]
-        : null;
+    final dp = Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(mainAxisSize: MainAxisSize.min, children: [dkey('SOFT1', icon: JpIcons.softKey), const SizedBox(width: 3), dkey('UP', icon: JpIcons.chevronUp), const SizedBox(width: 3), dkey('SOFT2', icon: JpIcons.softKey)]),
+      const SizedBox(height: 3),
+      Row(mainAxisSize: MainAxisSize.min, children: [dkey('LEFT', icon: JpIcons.chevronLeft), const SizedBox(width: 3), dkey('OK', label: 'OK'), const SizedBox(width: 3), dkey('RIGHT', icon: JpIcons.chevronRight)]),
+      const SizedBox(height: 3),
+      Row(mainAxisSize: MainAxisSize.min, children: [dkey('BACK', icon: JpIcons.undo), const SizedBox(width: 3), dkey('DOWN', icon: JpIcons.chevronDown), const SizedBox(width: 3), dkey('BACKSPACE', icon: JpIcons.erase)]),
+    ]);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -140,16 +159,15 @@ class _KeypadState extends State<Keypad> {
           const Spacer(),
           _swap(() { setState(() => dpad = !dpad); _p?.setString('pad', dpad ? 'dpad' : 'stick'); }),
         ]),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         SizedBox(
           height: 108,
           child: Row(children: [
-            Expanded(child: Column(children: left)),
+            Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              for (var i = 0; i < left.length; i++) ...[if (i > 0) const SizedBox(height: 5), left[i]],
+            ])),
             const SizedBox(width: 14),
-            SizedBox(
-              width: 112,
-              child: dpad ? Column(children: right!) : _Joystick(t),
-            ),
+            SizedBox(width: 112, height: 108, child: Center(child: dpad ? dp : _Joystick(t))),
           ]),
         ),
       ]),
@@ -157,27 +175,31 @@ class _KeypadState extends State<Keypad> {
   }
 }
 
+Color get _numBg => Jp.dark ? const Color(0xFF262238) : const Color(0xFFF3F0FB);
+Color get _numLine => Jp.dark ? const Color(0xFF3A3458) : const Color(0xFFE2DCF4);
+Color get _numSub => Jp.dark ? const Color(0xFFA99BEA) : const Color(0xFF8F7FD6);
+
 class _Hold extends StatefulWidget {
   final VoidCallback onDown, onUp;
-  final Widget child;
-  const _Hold({required this.onDown, required this.onUp, required this.child});
+  final Widget Function(bool pressed) builder;
+  const _Hold({required this.onDown, required this.onUp, required this.builder});
   @override
   State<_Hold> createState() => _HoldState();
 }
 
 class _HoldState extends State<_Hold> {
   bool down = false;
-  void _d() { if (!down) { down = true; widget.onDown(); } }
-  void _u() { if (down) { down = false; widget.onUp(); } }
+  void _d() { if (!down) { down = true; widget.onDown(); if (mounted) setState(() {}); } }
+  void _u() { if (down) { down = false; widget.onUp(); if (mounted) setState(() {}); } }
   @override
-  void dispose() { _u(); super.dispose(); }
+  void dispose() { if (down) { down = false; widget.onUp(); } super.dispose(); }
   @override
   Widget build(BuildContext context) => Listener(
         behavior: HitTestBehavior.opaque,
         onPointerDown: (_) => _d(),
         onPointerUp: (_) => _u(),
         onPointerCancel: (_) => _u(),
-        child: widget.child,
+        child: widget.builder(down),
       );
 }
 
@@ -199,10 +221,10 @@ class _JoystickState extends State<_Joystick> {
   void _update(Offset local, double r) {
     var d = local - Offset(r, r);
     final dist = d.distance;
-    final max = r - 21;
+    final max = r * 0.62;
     if (dist > max) d = d * (max / dist);
     Set<String> next = {};
-    if (dist > r * 0.28) {
+    if (dist > r * 0.22) {
       var a = d.direction; // 0 = phải, +π/2 = xuống (hệ toạ độ màn hình)
       if (a < 0) a += 6.283185307179586;
       final idx = ((a / (6.283185307179586 / 8)) + 0.5).floor() % 8;
@@ -228,7 +250,7 @@ class _JoystickState extends State<_Joystick> {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (c, box) {
-        final size = math(box.maxWidth, box.maxHeight);
+        final size = math(104, math(box.maxWidth, box.maxHeight));
         final r = size / 2;
         return Center(
           child: SizedBox(
@@ -240,10 +262,16 @@ class _JoystickState extends State<_Joystick> {
               onPointerMove: (e) => _update(e.localPosition, r),
               onPointerUp: (_) => _release(),
               onPointerCancel: (_) => _release(),
-              child: Stack(alignment: Alignment.center, children: [
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [Jp.surface, Jp.surface, Jp.primarySoft]),
+                  border: Border.all(color: held.isNotEmpty ? Jp.primary : Jp.lineStrong, width: 2),
+                ),
+                child: Stack(alignment: Alignment.center, children: [
                 Container(width: 82, height: 82, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Jp.primary.withOpacity(0.25)))),
                 Transform.translate(offset: knob, child: Container(width: 42, height: 42, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle))),
-              ]),
+              ])),
             ),
           ),
         );

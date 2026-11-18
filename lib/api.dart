@@ -22,7 +22,8 @@ class Rental {
   final int endsAt, screenWidth, screenHeight;
   final String? machineStatus, productName, connectionStatus;
   final bool autoRenew;
-  Rental(this.id, this.deviceName, this.status, this.endsAt, this.machineStatus, this.productName, this.connectionStatus, this.screenWidth, this.screenHeight, [this.autoRenew = false]);
+  final String deviceCode;
+  Rental(this.id, this.deviceName, this.status, this.endsAt, this.machineStatus, this.productName, this.connectionStatus, this.screenWidth, this.screenHeight, [this.autoRenew = false, this.deviceCode = '']);
 
   int get endsMs => endsAt <= 0 ? 0 : (endsAt < 100000000000 ? endsAt * 1000 : endsAt);
   bool get expired => endsMs > 0 && endsMs <= DateTime.now().millisecondsSinceEpoch;
@@ -42,6 +43,7 @@ class Rental {
       n(screen?['width']),
       n(screen?['height']),
       (o['autoRenew'] is Map) && (o['autoRenew'] as Map)['enabled'] == true,
+      '${o['deviceCode'] ?? ''}',
     );
   }
 }
