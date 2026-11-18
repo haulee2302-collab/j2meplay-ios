@@ -9,6 +9,7 @@ import '../emu/session.dart';
 import '../emu/store.dart';
 import '../icons.dart';
 import '../theme.dart';
+import 'floating.dart';
 import '../widgets.dart';
 
 /// Tab "Giả lập": giống bản Android — giả lập J2ME chạy ngay trên máy từ JAR trong Kho JAR thiết bị.
@@ -71,7 +72,7 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _config(LocalInstance? inst) async {
+  Future<LocalInstance?> _config(LocalInstance? inst) async {
     final r = await showModalBottomSheet<LocalInstance>(
       context: context,
       isScrollControlled: true,
@@ -79,9 +80,14 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
       backgroundColor: Jp.surface,
       builder: (_) => _ConfigSheet(initial: inst),
     );
-    if (r == null || !mounted) return;
+    if (r == null || !mounted) return null;
+    if (EmuRuntime.sessions.containsKey(r.id)) {
+      EmuRuntime.close(r.id); // cấu hình đổi (JAR/kích thước...) → chạy lại bằng cấu hình mới
+      LocalFloats.close(r.id);
+    }
     _persist(list.any((e) => e.id == r.id) ? list.map((e) => e.id == r.id ? r : e).toList() : [...list, r]);
     _notice(inst != null ? 'Đã lưu cấu hình ${r.name}' : 'Đã tạo ${r.name}');
+    return r;
   }
 
   Future<void> _jarStore() async {

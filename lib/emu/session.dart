@@ -11,6 +11,7 @@ import '../jvm/jar.dart';
 import '../jvm/midp.dart';
 import '../jvm/vm.dart';
 import 'glyphs.dart';
+import 'net.dart';
 import 'store.dart';
 
 /// Phím ảo gửi vào game local (nối với Canvas MIDP ở giai đoạn sau).
@@ -81,6 +82,8 @@ class EmuSession extends ChangeNotifier {
       m.glyphProvider = Glyphs.get;
       m.install();
       m.onExit = () => _set('Game đã thoát');
+      m.onScreen = notifyListeners;
+      installNet(m, inst.proxy);
       m.onFrame = _publish;
       try {
         final f = await _rmsFile();

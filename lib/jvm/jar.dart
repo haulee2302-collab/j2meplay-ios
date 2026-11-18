@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
+import 'extra.dart';
 import 'natives.dart';
 import 'vm.dart';
 
@@ -56,5 +57,6 @@ JarInfo loadJar(Vm vm, Uint8List bytes) {
 Vm createVm({void Function(String)? onLog}) {
   final vm = Vm()..onLog = onLog;
   installCore(vm);
+  installExtra(vm);
   return vm;
 }

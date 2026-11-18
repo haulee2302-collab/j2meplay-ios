@@ -7,14 +7,33 @@ import 'package:image/image.dart' as im;
 import 'gfx.dart';
 import 'vm.dart';
 
-class _In {
-  final Uint8List b;
+class StreamIn {
+  Uint8List b;
   int p = 0;
-  _In(this.b);
+  bool live = false, closed = false;
+  String? error;
+  StreamIn(this.b);
+  int get avail => b.length - p;
+  void add(Uint8List d) {
+    final rest = avail;
+    final n = Uint8List(rest + d.length);
+    n.setRange(0, rest, b, p);
+    n.setRange(rest, n.length, d);
+    b = n;
+    p = 0;
+  }
 }
 
-class _Out {
+class StreamOut {
   final BytesBuilder b = BytesBuilder();
+  void Function(List<int>)? sink; // luồng mạng: gửi ngay
+  void put(List<int> d) {
+    if (sink != null) {
+      sink!(d);
+    } else {
+      b.add(d);
+    }
+  }
 }
 
 class _G {
@@ -56,6 +75,62 @@ class Midp {
   void Function()? onExit;
   void Function()? onFrame;
   final List<JObject> serial = [];
+  JObject? screen; // Form/List/TextBox/Alert đang hiển thị
+  void Function()? onScreen;
+  Timer? _alertT;
+
+  void setCurrent(JObject o) {
+    if (o.cls.isSubOf(vm.loadClass('javax/microedition/lcdui/Canvas'))) {
+      screen = null;
+      onScreen?.call();
+      if (!identical(canvas, o)) {
+        canvas = o;
+        repaintReq = true;
+        _held.clear();
+        keyStates = 0;
+        _call(o, 'showNotify()V');
+      }
+      repaintReq = true;
+    } else {
+      screen = o;
+      onScreen?.call();
+      if (o.cls.name == 'javax/microedition/lcdui/Alert') {
+        final to = (o.f['\$timeout'] ?? 2000) as int;
+        _alertT?.cancel();
+        if (to > 0) _alertT = Timer(Duration(milliseconds: to), () { if (identical(screen, o)) dismissAlert(); });
+      }
+    }
+  }
+
+  void dismissAlert() {
+    final o = screen;
+    if (o == null) return;
+    final next = o.f['\$next'];
+    screen = null;
+    onScreen?.call();
+    if (next != null) setCurrent(next as JObject);
+    repaintReq = true;
+  }
+
+  /// Người dùng bấm một lệnh (Command) trên màn hình Form/List/TextBox.
+  void fireCommand(JObject cmd) {
+    final o = screen;
+    if (o == null) return;
+    final l = o.f['\$cl'];
+    if (l != null) {
+      _call(l as JObject, 'commandAction(Ljavax/microedition/lcdui/Command;Ljavax/microedition/lcdui/Displayable;)V', [cmd, o]);
+    } else if (o.cls.name == 'javax/microedition/lcdui/Alert') {
+      dismissAlert();
+    }
+  }
+
+  void selectListItem(int idx) {
+    final o = screen;
+    if (o == null) return;
+    o.f['\$sel'] = idx;
+    final c = vm.loadClass('javax/microedition/lcdui/List').statics['SELECT_COMMAND'];
+    if (c != null && (o.f['\$ltype'] ?? 3) == 3) fireCommand(c as JObject);
+  }
 
   Midp(this.vm, this.width, this.height, this.attrs);
 
@@ -244,19 +319,19 @@ class Midp {
     vm.defClass('java/io/DataInput', null, isInterface: true);
     vm.defClass('java/io/DataOutput', null, isInterface: true);
 
-    _In inn(dynamic o) {
+    StreamIn inn(dynamic o) {
       final n = (o as JObject).native;
-      if (n is _In) return n;
+      if (n is StreamIn) return n;
       throw vm.ex('java/io/IOException', 'Luồng không hợp lệ');
     }
 
-    _Out outt(dynamic o) {
+    StreamOut outt(dynamic o) {
       final n = (o as JObject).native;
-      if (n is _Out) return n;
+      if (n is StreamOut) return n;
       throw vm.ex('java/io/IOException', 'Luồng không hợp lệ');
     }
 
-    Uint8List need(_In x, int n) {
+    Uint8List need(StreamIn x, int n) {
       if (x.p + n > x.b.length) throw vm.ex('java/io/EOFException');
       final r = Uint8List.sublistView(x.b, x.p, x.p + n);
       x.p += n;
@@ -266,24 +341,23 @@ class Midp {
     vm.reg(IN, '<init>', '()V', (v, t, a) => null);
     vm.reg('java/io/ByteArrayInputStream', '<init>', '([B)V', (v, t, a) {
       final d = (a[1] as JArray).data;
-      (a[0] as JObject).native = _In(Uint8List.fromList([for (final e in d) (e as int) & 255]));
+      (a[0] as JObject).native = StreamIn(Uint8List.fromList([for (final e in d) (e as int) & 255]));
       return null;
     });
     vm.reg('java/io/ByteArrayInputStream', '<init>', '([BII)V', (v, t, a) {
       final d = (a[1] as JArray).data;
       final o = i(a, 2), n = i(a, 3);
-      (a[0] as JObject).native = _In(Uint8List.fromList([for (var k = o; k < o + n; k++) (d[k] as int) & 255]));
+      (a[0] as JObject).native = StreamIn(Uint8List.fromList([for (var k = o; k < o + n; k++) (d[k] as int) & 255]));
       return null;
     });
     vm.reg('java/io/DataInputStream', '<init>', '(Ljava/io/InputStream;)V', (v, t, a) {
       (a[0] as JObject).native = inn(a[1]);
       return null;
     });
-    vm.reg(IN, 'read', '()I', (v, t, a) {
-      final x = inn(a[0]);
-      return x.p < x.b.length ? x.b[x.p++] : -1;
-    });
-    int readInto(_In x, JArray arr, int off, int len) {
+    dynamic rd(JThread t, StreamIn x, int Function() needFn, dynamic Function() f, {int slots = 1}) =>
+        !x.live ? f() : vm.block(t, () => x.closed || x.avail >= needFn(), f, slots: slots);
+    int u16(StreamIn x) => x.avail < 2 ? 2 : 2 + ((x.b[x.p] << 8) | x.b[x.p + 1]);
+    int readInto(StreamIn x, JArray arr, int off, int len) {
       if (len == 0) return 0;
       if (x.p >= x.b.length) return -1;
       final n = len < x.b.length - x.p ? len : x.b.length - x.p;
@@ -293,74 +367,86 @@ class Midp {
       x.p += n;
       return n;
     }
-    vm.reg(IN, 'read', '([B)I', (v, t, a) => readInto(inn(a[0]), a[1] as JArray, 0, (a[1] as JArray).length));
-    vm.reg(IN, 'read', '([BII)I', (v, t, a) => readInto(inn(a[0]), a[1] as JArray, i(a, 2), i(a, 3)));
-    vm.reg(IN, 'available', '()I', (v, t, a) { final x = inn(a[0]); return x.b.length - x.p; });
+    vm.reg(IN, 'read', '()I', (v, t, a) {
+      final x = inn(a[0]);
+      return rd(t, x, () => 1, () => x.p < x.b.length ? x.b[x.p++] : -1);
+    });
+    vm.reg(IN, 'read', '([B)I', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 1, () => readInto(x, a[1] as JArray, 0, (a[1] as JArray).length)); });
+    vm.reg(IN, 'read', '([BII)I', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 1, () => readInto(x, a[1] as JArray, i(a, 2), i(a, 3))); });
+    vm.reg(IN, 'available', '()I', (v, t, a) => inn(a[0]).avail);
     vm.reg(IN, 'skip', '(J)J', (v, t, a) {
       final x = inn(a[0]);
-      final n = i(a, 1) < x.b.length - x.p ? i(a, 1) : x.b.length - x.p;
+      final n = i(a, 1) < x.avail ? i(a, 1) : x.avail;
       x.p += n;
       return n;
     });
-    vm.reg(IN, 'close', '()V', (v, t, a) => null);
+    vm.reg(IN, 'close', '()V', (v, t, a) {
+      final x = (a[0] as JObject).native;
+      if (x is StreamIn) x.closed = true;
+      return null;
+    });
     vm.reg(IN, 'mark', '(I)V', (v, t, a) => null);
     vm.reg(IN, 'reset', '()V', (v, t, a) { inn(a[0]).p = 0; return null; });
     vm.reg(IN, 'markSupported', '()Z', (v, t, a) => 0);
-    vm.reg(IN, 'readByte', '()B', (v, t, a) => need(inn(a[0]), 1)[0].toSigned(8));
-    vm.reg(IN, 'readUnsignedByte', '()I', (v, t, a) => need(inn(a[0]), 1)[0]);
-    vm.reg(IN, 'readBoolean', '()Z', (v, t, a) => need(inn(a[0]), 1)[0] != 0 ? 1 : 0);
-    vm.reg(IN, 'readShort', '()S', (v, t, a) => ByteData.sublistView(need(inn(a[0]), 2)).getInt16(0, Endian.big));
-    vm.reg(IN, 'readUnsignedShort', '()I', (v, t, a) => ByteData.sublistView(need(inn(a[0]), 2)).getUint16(0, Endian.big));
-    vm.reg(IN, 'readChar', '()C', (v, t, a) => ByteData.sublistView(need(inn(a[0]), 2)).getUint16(0, Endian.big));
-    vm.reg(IN, 'readInt', '()I', (v, t, a) => ByteData.sublistView(need(inn(a[0]), 4)).getInt32(0, Endian.big));
-    vm.reg(IN, 'readLong', '()J', (v, t, a) => ByteData.sublistView(need(inn(a[0]), 8)).getInt64(0, Endian.big));
+    vm.reg(IN, 'readByte', '()B', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 1, () => need(x, 1)[0].toSigned(8)); });
+    vm.reg(IN, 'readUnsignedByte', '()I', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 1, () => need(x, 1)[0]); });
+    vm.reg(IN, 'readBoolean', '()Z', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 1, () => need(x, 1)[0] != 0 ? 1 : 0); });
+    vm.reg(IN, 'readShort', '()S', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 2, () => ByteData.sublistView(need(x, 2)).getInt16(0, Endian.big)); });
+    vm.reg(IN, 'readUnsignedShort', '()I', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 2, () => ByteData.sublistView(need(x, 2)).getUint16(0, Endian.big)); });
+    vm.reg(IN, 'readChar', '()C', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 2, () => ByteData.sublistView(need(x, 2)).getUint16(0, Endian.big)); });
+    vm.reg(IN, 'readInt', '()I', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 4, () => ByteData.sublistView(need(x, 4)).getInt32(0, Endian.big)); });
+    vm.reg(IN, 'readLong', '()J', (v, t, a) { final x = inn(a[0]); return rd(t, x, () => 8, () => ByteData.sublistView(need(x, 8)).getInt64(0, Endian.big), slots: 2); });
     vm.reg(IN, 'readUTF', '()Ljava/lang/String;', (v, t, a) {
       final x = inn(a[0]);
-      final n = ByteData.sublistView(need(x, 2)).getUint16(0, Endian.big);
-      return s(utf8.decode(need(x, n), allowMalformed: true));
+      return rd(t, x, () => u16(x), () {
+        final n = ByteData.sublistView(need(x, 2)).getUint16(0, Endian.big);
+        return s(utf8.decode(need(x, n), allowMalformed: true));
+      });
     });
-    vm.reg(IN, 'readFully', '([B)V', (v, t, a) {
-      final arr = a[1] as JArray;
-      final b = need(inn(a[0]), arr.length);
+    void fully(StreamIn x, JArray arr, int off, int n) {
+      final b = need(x, n);
       for (var k = 0; k < b.length; k++) {
-        arr.data[k] = b[k].toSigned(8);
+        arr.data[off + k] = b[k].toSigned(8);
       }
+    }
+    vm.reg(IN, 'readFully', '([B)V', (v, t, a) {
+      final x = inn(a[0]);
+      final arr = a[1] as JArray;
+      rd(t, x, () => arr.length, () { fully(x, arr, 0, arr.length); return null; }, slots: 0);
       return null;
     });
     vm.reg(IN, 'readFully', '([BII)V', (v, t, a) {
+      final x = inn(a[0]);
       final arr = a[1] as JArray;
-      final b = need(inn(a[0]), i(a, 3));
-      for (var k = 0; k < b.length; k++) {
-        arr.data[i(a, 2) + k] = b[k].toSigned(8);
-      }
+      rd(t, x, () => i(a, 3), () { fully(x, arr, i(a, 2), i(a, 3)); return null; }, slots: 0);
       return null;
     });
 
     vm.reg(OUT, '<init>', '()V', (v, t, a) => null);
-    vm.reg('java/io/ByteArrayOutputStream', '<init>', '()V', (v, t, a) { (a[0] as JObject).native = _Out(); return null; });
-    vm.reg('java/io/ByteArrayOutputStream', '<init>', '(I)V', (v, t, a) { (a[0] as JObject).native = _Out(); return null; });
+    vm.reg('java/io/ByteArrayOutputStream', '<init>', '()V', (v, t, a) { (a[0] as JObject).native = StreamOut(); return null; });
+    vm.reg('java/io/ByteArrayOutputStream', '<init>', '(I)V', (v, t, a) { (a[0] as JObject).native = StreamOut(); return null; });
     vm.reg('java/io/DataOutputStream', '<init>', '(Ljava/io/OutputStream;)V', (v, t, a) {
       (a[0] as JObject).native = outt(a[1]);
       return null;
     });
-    vm.reg(OUT, 'write', '(I)V', (v, t, a) { outt(a[0]).b.addByte(i(a, 1) & 255); return null; });
+    vm.reg(OUT, 'write', '(I)V', (v, t, a) { outt(a[0]).put([i(a, 1) & 255]); return null; });
     vm.reg(OUT, 'write', '([B)V', (v, t, a) {
-      outt(a[0]).b.add([for (final e in (a[1] as JArray).data) (e as int) & 255]);
+      outt(a[0]).put([for (final e in (a[1] as JArray).data) (e as int) & 255]);
       return null;
     });
     vm.reg(OUT, 'write', '([BII)V', (v, t, a) {
       final d = (a[1] as JArray).data;
-      outt(a[0]).b.add([for (var k = i(a, 2); k < i(a, 2) + i(a, 3); k++) (d[k] as int) & 255]);
+      outt(a[0]).put([for (var k = i(a, 2); k < i(a, 2) + i(a, 3); k++) (d[k] as int) & 255]);
       return null;
     });
     vm.reg(OUT, 'flush', '()V', (v, t, a) => null);
     vm.reg(OUT, 'close', '()V', (v, t, a) => null);
-    vm.reg(OUT, 'writeByte', '(I)V', (v, t, a) { outt(a[0]).b.addByte(i(a, 1) & 255); return null; });
-    vm.reg(OUT, 'writeBoolean', '(Z)V', (v, t, a) { outt(a[0]).b.addByte(i(a, 1) != 0 ? 1 : 0); return null; });
+    vm.reg(OUT, 'writeByte', '(I)V', (v, t, a) { outt(a[0]).put([i(a, 1) & 255]); return null; });
+    vm.reg(OUT, 'writeBoolean', '(Z)V', (v, t, a) { outt(a[0]).put([i(a, 1) != 0 ? 1 : 0]); return null; });
     void wr(dynamic o, int n, void Function(ByteData) f) {
       final bd = ByteData(n);
       f(bd);
-      outt(o).b.add(bd.buffer.asUint8List());
+      outt(o).put(bd.buffer.asUint8List());
     }
     vm.reg(OUT, 'writeShort', '(I)V', (v, t, a) { wr(a[0], 2, (b) => b.setInt16(0, i(a, 1).toSigned(16), Endian.big)); return null; });
     vm.reg(OUT, 'writeChar', '(I)V', (v, t, a) { wr(a[0], 2, (b) => b.setUint16(0, i(a, 1) & 0xFFFF, Endian.big)); return null; });
@@ -369,7 +455,7 @@ class Midp {
     vm.reg(OUT, 'writeUTF', '(Ljava/lang/String;)V', (v, t, a) {
       final b = utf8.encode(ss(a[1]));
       wr(a[0], 2, (d) => d.setUint16(0, b.length, Endian.big));
-      outt(a[0]).b.add(b);
+      outt(a[0]).put(b);
       return null;
     });
     vm.reg('java/io/ByteArrayOutputStream', 'toByteArray', '()[B', (v, t, a) =>
@@ -385,7 +471,7 @@ class Midp {
       final d = v.jarResources[n];
       if (d == null) return null;
       final o = JObject(v.loadClass('java/io/ByteArrayInputStream'));
-      o.native = _In(d);
+      o.native = StreamIn(d);
       return o;
     });
     vm.reg(C, 'forName', '(Ljava/lang/String;)Ljava/lang/Class;', (v, t, a) {
@@ -485,10 +571,18 @@ class Midp {
     vm.reg(D, 'getWidth', '()I', (v, t, a) => width);
     vm.reg(D, 'getHeight', '()I', (v, t, a) => height);
     vm.reg(D, 'isShown', '()Z', (v, t, a) => identical(canvas, a[0]) ? 1 : 0);
-    vm.reg(D, 'setTitle', '(Ljava/lang/String;)V', (v, t, a) => null);
+    vm.reg(D, 'setTitle', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$title'] = a[1]; onScreen?.call(); return null; });
+    vm.reg(D, 'getTitle', '()Ljava/lang/String;', (v, t, a) => (a[0] as JObject).f['\$title']);
     vm.reg(D, 'setCommandListener', '(Ljavax/microedition/lcdui/CommandListener;)V', (v, t, a) { (a[0] as JObject).f['\$cl'] = a[1]; return null; });
-    vm.reg(D, 'addCommand', '(Ljavax/microedition/lcdui/Command;)V', (v, t, a) => null);
-    vm.reg(D, 'removeCommand', '(Ljavax/microedition/lcdui/Command;)V', (v, t, a) => null);
+    vm.reg(D, 'addCommand', '(Ljavax/microedition/lcdui/Command;)V', (v, t, a) {
+      final l = ((a[0] as JObject).f['\$cmds'] ??= <JObject>[]) as List;
+      if (!l.contains(a[1])) l.add(a[1]);
+      return null;
+    });
+    vm.reg(D, 'removeCommand', '(Ljavax/microedition/lcdui/Command;)V', (v, t, a) {
+      ((a[0] as JObject).f['\$cmds'] as List?)?.remove(a[1]);
+      return null;
+    });
     vm.reg(D, 'sizeChanged', '(II)V', (v, t, a) => null);
 
     // Canvas
@@ -558,24 +652,19 @@ class Midp {
     vm.reg(DP, 'getDisplay', '(Ljavax/microedition/midlet/MIDlet;)Ljavax/microedition/lcdui/Display;', (v, t, a) =>
         display ??= JObject(v.loadClass(DP)), isStatic: true);
     void setCur(Vm v, dynamic d) {
-      if (d == null) return;
-      final o = d as JObject;
-      if (o.cls.isSubOf(v.loadClass(CV))) {
-        final prev = canvas;
-        if (!identical(prev, o)) {
-          canvas = o;
-          repaintReq = true;
-          _held.clear();
-          keyStates = 0;
-          _call(o, 'showNotify()V');
-        }
-      } else {
-        v.onLog?.call('Màn hình ${o.cls.name} (Form/List/Alert) chưa được hỗ trợ.');
-      }
+      if (d != null) setCurrent(d as JObject);
     }
     vm.reg(DP, 'setCurrent', '(Ljavax/microedition/lcdui/Displayable;)V', (v, t, a) { setCur(v, a[1]); return null; });
-    vm.reg(DP, 'setCurrent', '(Ljavax/microedition/lcdui/Alert;Ljavax/microedition/lcdui/Displayable;)V', (v, t, a) { setCur(v, a[2]); return null; });
-    vm.reg(DP, 'getCurrent', '()Ljavax/microedition/lcdui/Displayable;', (v, t, a) => canvas);
+    vm.reg(DP, 'setCurrent', '(Ljavax/microedition/lcdui/Alert;Ljavax/microedition/lcdui/Displayable;)V', (v, t, a) {
+      (a[1] as JObject).f['\$next'] = a[2];
+      setCur(v, a[1]);
+      return null;
+    });
+    vm.reg(DP, 'getCurrent', '()Ljavax/microedition/lcdui/Displayable;', (v, t, a) => screen ?? canvas);
+    vm.reg(DP, 'getBestImageWidth', '(I)I', (v, t, a) => 32);
+    vm.reg(DP, 'getBestImageHeight', '(I)I', (v, t, a) => 32);
+    vm.reg(DP, 'getColor', '(I)I', (v, t, a) => i(a, 1) == 1 || i(a, 1) == 3 ? 0 : 0xFFFFFF);
+    vm.reg(DP, 'setCurrentItem', '(Ljavax/microedition/lcdui/Item;)V', (v, t, a) => null);
     vm.reg(DP, 'callSerially', '(Ljava/lang/Runnable;)V', (v, t, a) { serial.add(a[1] as JObject); return null; });
     vm.reg(DP, 'isColor', '()Z', (v, t, a) => 1);
     vm.reg(DP, 'numColors', '()I', (v, t, a) => 16777216);
@@ -594,11 +683,7 @@ class Midp {
     vm.reg(CM, 'getLabel', '()Ljava/lang/String;', (v, t, a) => (a[0] as JObject).f['\$l']);
     vm.reg(CM, 'getCommandType', '()I', (v, t, a) => (a[0] as JObject).f['\$t']);
     vm.reg(CM, 'getPriority', '()I', (v, t, a) => (a[0] as JObject).f['\$p']);
-    for (final k in const ['Form', 'List', 'Alert', 'TextBox']) {
-      vm.reg('javax/microedition/lcdui/$k', '<init>', '(Ljava/lang/String;)V', (v, t, a) => null);
-    }
-    vm.reg('javax/microedition/lcdui/Form', 'append', '(Ljava/lang/String;)I', (v, t, a) => 0);
-    vm.reg('javax/microedition/lcdui/Alert', 'setTimeout', '(I)V', (v, t, a) => null);
+    _installScreens();
 
     // ----- Font -----
     JObject mkFont(int face, int style, int size) => vm.box(FT, _F(face, style, size));
@@ -911,6 +996,179 @@ class Midp {
       }, isStatic: true);
     }
     vm.defClass('javax/microedition/io/Connection', null, isInterface: true);
+  }
+
+  void _installScreens() {
+    const obj = 'java/lang/Object';
+    const L = 'javax/microedition/lcdui/';
+    JObject sv(String v) => vm.str(v);
+    String ss(dynamic o) {
+      if (o == null) throw vm.ex('java/lang/NullPointerException');
+      return (o as JObject).native as String;
+    }
+    int i(List a, int k) => a[k] as int;
+    String strOr(dynamic o) => o == null ? '' : (o as JObject).native as String;
+
+    // Item
+    vm.defClass('${L}Item', obj);
+    vm.defClass('${L}StringItem', '${L}Item');
+    vm.defClass('${L}TextField', '${L}Item', statics: {'ANY': 0, 'EMAILADDR': 1, 'NUMERIC': 2, 'PHONENUMBER': 3, 'URL': 4, 'DECIMAL': 5, 'PASSWORD': 0x10000, 'UNEDITABLE': 0x20000});
+    vm.defClass('${L}ChoiceGroup', '${L}Item', statics: {'EXCLUSIVE': 1, 'MULTIPLE': 2, 'IMPLICIT': 3, 'POPUP': 4});
+    vm.defClass('${L}Gauge', '${L}Item');
+    vm.defClass('${L}ItemStateListener', null, isInterface: true);
+    vm.reg('${L}Item', 'setLabel', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$label'] = a[1]; return null; });
+    vm.reg('${L}Item', 'getLabel', '()Ljava/lang/String;', (v, t, a) => (a[0] as JObject).f['\$label']);
+    vm.reg('${L}StringItem', '<init>', '(Ljava/lang/String;Ljava/lang/String;)V', (v, t, a) {
+      final o = a[0] as JObject;
+      o.f['\$label'] = a[1];
+      o.f['\$text'] = a[2];
+      return null;
+    });
+    vm.reg('${L}StringItem', 'setText', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$text'] = a[1]; onScreen?.call(); return null; });
+    vm.reg('${L}StringItem', 'getText', '()Ljava/lang/String;', (v, t, a) => (a[0] as JObject).f['\$text']);
+    const TF = '${L}TextField';
+    vm.reg(TF, '<init>', '(Ljava/lang/String;Ljava/lang/String;II)V', (v, t, a) {
+      final o = a[0] as JObject;
+      o.f['\$label'] = a[1];
+      o.f['\$text'] = a[2] ?? sv('');
+      o.f['\$max'] = i(a, 3);
+      o.f['\$cons'] = i(a, 4);
+      return null;
+    });
+    vm.reg(TF, 'getString', '()Ljava/lang/String;', (v, t, a) => (a[0] as JObject).f['\$text']);
+    vm.reg(TF, 'setString', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$text'] = a[1] ?? sv(''); onScreen?.call(); return null; });
+    vm.reg(TF, 'size', '()I', (v, t, a) => strOr((a[0] as JObject).f['\$text']).length);
+    vm.reg(TF, 'getMaxSize', '()I', (v, t, a) => (a[0] as JObject).f['\$max'] ?? 0);
+    vm.reg(TF, 'setMaxSize', '(I)I', (v, t, a) { (a[0] as JObject).f['\$max'] = i(a, 1); return i(a, 1); });
+    vm.reg(TF, 'setConstraints', '(I)V', (v, t, a) { (a[0] as JObject).f['\$cons'] = i(a, 1); return null; });
+    vm.reg(TF, 'getConstraints', '()I', (v, t, a) => (a[0] as JObject).f['\$cons'] ?? 0);
+
+    // Danh sách lựa chọn dùng chung cho ChoiceGroup và List
+    List<JObject> els(dynamic o) => ((o as JObject).f['\$els'] ??= <JObject>[]) as List<JObject>;
+    void choice(String cls) {
+      vm.reg(cls, 'append', '(Ljava/lang/String;Ljavax/microedition/lcdui/Image;)I', (v, t, a) {
+        els(a[0]).add(a[1] as JObject);
+        onScreen?.call();
+        return els(a[0]).length - 1;
+      });
+      vm.reg(cls, 'insert', '(ILjava/lang/String;Ljavax/microedition/lcdui/Image;)V', (v, t, a) { els(a[0]).insert(i(a, 1), a[2] as JObject); onScreen?.call(); return null; });
+      vm.reg(cls, 'set', '(ILjava/lang/String;Ljavax/microedition/lcdui/Image;)V', (v, t, a) { els(a[0])[i(a, 1)] = a[2] as JObject; onScreen?.call(); return null; });
+      vm.reg(cls, 'delete', '(I)V', (v, t, a) { els(a[0]).removeAt(i(a, 1)); onScreen?.call(); return null; });
+      vm.reg(cls, 'deleteAll', '()V', (v, t, a) { els(a[0]).clear(); onScreen?.call(); return null; });
+      vm.reg(cls, 'size', '()I', (v, t, a) => els(a[0]).length);
+      vm.reg(cls, 'getString', '(I)Ljava/lang/String;', (v, t, a) => els(a[0])[i(a, 1)]);
+      vm.reg(cls, 'getSelectedIndex', '()I', (v, t, a) => (a[0] as JObject).f['\$sel'] ?? (els(a[0]).isEmpty ? -1 : 0));
+      vm.reg(cls, 'setSelectedIndex', '(IZ)V', (v, t, a) { (a[0] as JObject).f['\$sel'] = i(a, 1); onScreen?.call(); return null; });
+      vm.reg(cls, 'isSelected', '(I)Z', (v, t, a) => ((a[0] as JObject).f['\$sel'] ?? 0) == i(a, 1) ? 1 : 0);
+    }
+    const CG = '${L}ChoiceGroup', LS = '${L}List';
+    vm.reg(CG, '<init>', '(Ljava/lang/String;I)V', (v, t, a) { (a[0] as JObject).f['\$label'] = a[1]; (a[0] as JObject).f['\$ltype'] = i(a, 2); return null; });
+    vm.reg(CG, '<init>', '(Ljava/lang/String;I[Ljava/lang/String;[Ljavax/microedition/lcdui/Image;)V', (v, t, a) {
+      final o = a[0] as JObject;
+      o.f['\$label'] = a[1];
+      o.f['\$ltype'] = i(a, 2);
+      if (a[3] != null) els(o).addAll([for (final e in (a[3] as JArray).data) e as JObject]);
+      return null;
+    });
+    choice(CG);
+    choice(LS);
+
+    // Form
+    const FM = '${L}Form';
+    List<JObject> items(dynamic o) => ((o as JObject).f['\$items'] ??= <JObject>[]) as List<JObject>;
+    vm.reg(FM, '<init>', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$title'] = a[1]; return null; });
+    vm.reg(FM, '<init>', '(Ljava/lang/String;[Ljavax/microedition/lcdui/Item;)V', (v, t, a) {
+      (a[0] as JObject).f['\$title'] = a[1];
+      if (a[2] != null) items(a[0]).addAll([for (final e in (a[2] as JArray).data) e as JObject]);
+      return null;
+    });
+    vm.reg(FM, 'append', '(Ljavax/microedition/lcdui/Item;)I', (v, t, a) { items(a[0]).add(a[1] as JObject); onScreen?.call(); return items(a[0]).length - 1; });
+    vm.reg(FM, 'append', '(Ljava/lang/String;)I', (v, t, a) {
+      final it = JObject(vm.loadClass('${L}StringItem'));
+      it.f['\$text'] = a[1];
+      items(a[0]).add(it);
+      onScreen?.call();
+      return items(a[0]).length - 1;
+    });
+    vm.reg(FM, 'append', '(Ljavax/microedition/lcdui/Image;)I', (v, t, a) => items(a[0]).length);
+    vm.reg(FM, 'insert', '(ILjavax/microedition/lcdui/Item;)V', (v, t, a) { items(a[0]).insert(i(a, 1), a[2] as JObject); onScreen?.call(); return null; });
+    vm.reg(FM, 'set', '(ILjavax/microedition/lcdui/Item;)V', (v, t, a) { items(a[0])[i(a, 1)] = a[2] as JObject; onScreen?.call(); return null; });
+    vm.reg(FM, 'get', '(I)Ljavax/microedition/lcdui/Item;', (v, t, a) => items(a[0])[i(a, 1)]);
+    vm.reg(FM, 'delete', '(I)V', (v, t, a) { items(a[0]).removeAt(i(a, 1)); onScreen?.call(); return null; });
+    vm.reg(FM, 'deleteAll', '()V', (v, t, a) { items(a[0]).clear(); onScreen?.call(); return null; });
+    vm.reg(FM, 'size', '()I', (v, t, a) => items(a[0]).length);
+    vm.reg(FM, 'setItemStateListener', '(Ljavax/microedition/lcdui/ItemStateListener;)V', (v, t, a) => null);
+
+    // List
+    vm.reg(LS, '<init>', '(Ljava/lang/String;I)V', (v, t, a) { (a[0] as JObject).f['\$title'] = a[1]; (a[0] as JObject).f['\$ltype'] = i(a, 2); return null; });
+    vm.reg(LS, '<init>', '(Ljava/lang/String;I[Ljava/lang/String;[Ljavax/microedition/lcdui/Image;)V', (v, t, a) {
+      final o = a[0] as JObject;
+      o.f['\$title'] = a[1];
+      o.f['\$ltype'] = i(a, 2);
+      if (a[3] != null) els(o).addAll([for (final e in (a[3] as JArray).data) e as JObject]);
+      return null;
+    });
+    vm.reg(LS, 'setSelectCommand', '(Ljavax/microedition/lcdui/Command;)V', (v, t, a) => null);
+    vm.defClass('${L}Choice', null, isInterface: true);
+    vm.loadClass(LS).statics.addAll({'IMPLICIT': 3, 'EXCLUSIVE': 1, 'MULTIPLE': 2});
+
+    // TextBox
+    const TB = '${L}TextBox';
+    vm.reg(TB, '<init>', '(Ljava/lang/String;Ljava/lang/String;II)V', (v, t, a) {
+      final o = a[0] as JObject;
+      o.f['\$title'] = a[1];
+      o.f['\$text'] = a[2] ?? sv('');
+      o.f['\$max'] = i(a, 3);
+      o.f['\$cons'] = i(a, 4);
+      return null;
+    });
+    vm.reg(TB, 'getString', '()Ljava/lang/String;', (v, t, a) => (a[0] as JObject).f['\$text']);
+    vm.reg(TB, 'setString', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$text'] = a[1] ?? sv(''); onScreen?.call(); return null; });
+    vm.reg(TB, 'size', '()I', (v, t, a) => strOr((a[0] as JObject).f['\$text']).length);
+    vm.reg(TB, 'getMaxSize', '()I', (v, t, a) => (a[0] as JObject).f['\$max'] ?? 0);
+    vm.reg(TB, 'setMaxSize', '(I)I', (v, t, a) { (a[0] as JObject).f['\$max'] = i(a, 1); return i(a, 1); });
+    vm.reg(TB, 'setConstraints', '(I)V', (v, t, a) { (a[0] as JObject).f['\$cons'] = i(a, 1); return null; });
+    vm.reg(TB, 'getConstraints', '()I', (v, t, a) => (a[0] as JObject).f['\$cons'] ?? 0);
+    vm.reg(TB, 'insert', '(Ljava/lang/String;I)V', (v, t, a) {
+      final o = a[0] as JObject;
+      final cur = strOr(o.f['\$text']);
+      final p = i(a, 2).clamp(0, cur.length);
+      o.f['\$text'] = sv(cur.substring(0, p) + ss(a[1]) + cur.substring(p));
+      return null;
+    });
+    vm.reg(TB, 'delete', '(II)V', (v, t, a) {
+      final o = a[0] as JObject;
+      final cur = strOr(o.f['\$text']);
+      final p = i(a, 1).clamp(0, cur.length), e = (p + i(a, 2)).clamp(0, cur.length);
+      o.f['\$text'] = sv(cur.substring(0, p) + cur.substring(e));
+      return null;
+    });
+
+    // Alert
+    const AL = '${L}Alert';
+    vm.loadClass(AL).statics['FOREVER'] = -2;
+    vm.reg(AL, '<init>', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$title'] = a[1]; return null; });
+    vm.reg(AL, '<init>', '(Ljava/lang/String;Ljava/lang/String;Ljavax/microedition/lcdui/Image;Ljavax/microedition/lcdui/AlertType;)V', (v, t, a) {
+      final o = a[0] as JObject;
+      o.f['\$title'] = a[1];
+      o.f['\$text'] = a[2];
+      return null;
+    });
+    vm.reg(AL, 'setString', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).f['\$text'] = a[1]; return null; });
+    vm.reg(AL, 'getString', '()Ljava/lang/String;', (v, t, a) => (a[0] as JObject).f['\$text']);
+    vm.reg(AL, 'setTimeout', '(I)V', (v, t, a) { (a[0] as JObject).f['\$timeout'] = i(a, 1); return null; });
+    vm.reg(AL, 'getTimeout', '()I', (v, t, a) => (a[0] as JObject).f['\$timeout'] ?? 2000);
+    vm.reg(AL, 'setType', '(Ljavax/microedition/lcdui/AlertType;)V', (v, t, a) => null);
+    vm.reg(AL, 'setImage', '(Ljavax/microedition/lcdui/Image;)V', (v, t, a) => null);
+    vm.reg('${L}AlertType', 'playSound', '(Ljavax/microedition/lcdui/Display;)Z', (v, t, a) => 1);
+    vm.loadClass('${L}AlertType').statics.addAll({'INFO': null, 'WARNING': null, 'ERROR': null, 'ALARM': null, 'CONFIRMATION': null});
+
+    // SELECT_COMMAND
+    final sel = JObject(vm.loadClass('${L}Command'));
+    sel.f['\$l'] = sv('Chọn');
+    sel.f['\$t'] = 1;
+    sel.f['\$p'] = 0;
+    vm.loadClass(LS).statics['SELECT_COMMAND'] = sel;
   }
 
   /// Xuất/nhập RMS (JSON) để lưu bền.

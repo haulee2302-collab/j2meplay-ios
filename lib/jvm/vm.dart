@@ -353,6 +353,7 @@ class Vm {
     return '${obj.cls.name}@${obj.hash.toRadixString(16)}';
   }
 
+  JMethod? _lastNat;
   JThread? currentThread;
 
   // ---------------- gọi đồng bộ (cho native gọi lại Java) ----------------
@@ -487,6 +488,34 @@ class Vm {
     return o;
   }
 
+  /// Ném ngoại lệ vào luồng đang chờ (sau khi native chặn xong và thất bại).
+  void throwInto(JThread t, JObject e) {
+    if (t.frames.isEmpty) return;
+    final f = t.frames.last;
+    if (f.pc > 0) f.pc -= 1;
+    _throw(t, e, 0);
+  }
+
+  /// Chặn luồng [t] đến khi [ready]; khi xong gọi [result] để thay giá trị trả về (đã đặt chỗ trên stack).
+  /// [slots] = 2 cho long/double, 0 cho void.
+  dynamic block(JThread t, bool Function() ready, dynamic Function() result, {int slots = 1, dynamic placeholder = 0}) {
+    if (ready()) return result();
+    t.blocker = ready;
+    t.yieldReq = true;
+    t.onWake = () {
+      try {
+        final r = result();
+        if (slots > 0 && t.frames.isNotEmpty) {
+          final f = t.frames.last;
+          f.stack[f.sp - slots] = r;
+        }
+      } on JavaThrow catch (e) {
+        throwInto(t, e.obj);
+      }
+    };
+    return placeholder;
+  }
+
   void stop() => stopped = true;
 
   // ---------------- khởi tạo lớp ----------------
@@ -516,7 +545,11 @@ class Vm {
     final name = cf.utf(nt.a), desc = cf.utf(nt.b);
     final owner = loadClass(cf.className(ref.a));
     final m = findMethod(owner, '$name$desc') ?? (name == 'clone' ? findMethod(loadClass('java/lang/Object'), '$name$desc') : null);
-    if (m == null) throw ex('java/lang/NoSuchMethodError', '${owner.name}.$name$desc');
+    if (m == null) {
+      // Giao diện của thư viện native (Enumeration, CommandListener...): tạo phương thức trừu tượng, gọi ảo sẽ tìm bản cài đặt trong lớp game.
+      if (owner.isInterface && owner.cf == null) return cur.mcache[idx] = JMethod(owner, name, desc, null, null);
+      throw ex('java/lang/NoSuchMethodError', '${owner.name}.$name$desc');
+    }
     return cur.mcache[idx] = m;
   }
 
@@ -1056,6 +1089,7 @@ class Vm {
                 f.sp = sp - n;
                 f.pc = pc;
                 currentThread = t;
+                _lastNat = target;
                 final r = target.native!(this, t, args);
                 sp -= n;
                 final rt = target.sig.ret;
@@ -1227,7 +1261,7 @@ class Vm {
         continue outer;
       } on TypeError catch (e) {
         f.pc = opPc;
-        _throw(t, ex('java/lang/Error', 'Lỗi kiểu trong VM: $e').obj, base);
+        _throw(t, ex('java/lang/Error', 'Lỗi kiểu trong VM: $e (native ${_lastNat?.cls.name}.${_lastNat?.name}${_lastNat?.desc}; hàm ${t.frames.isNotEmpty ? '${t.frames.last.m.cls.name}.${t.frames.last.m.name}' : '?'})').obj, base);
         continue outer;
       }
     }

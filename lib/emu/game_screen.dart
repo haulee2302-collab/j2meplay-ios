@@ -7,30 +7,69 @@ import '../screens/game.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'kbd.dart';
+import 'screens_ui.dart';
 import 'session.dart';
 import 'store.dart';
 
 /// Màn chơi giả lập local: header (thoát · tên game · trạng thái), màn hình game, thanh chức năng và bàn phím ảo.
 class LocalGameScreen extends StatefulWidget {
   final LocalInstance inst;
-  final VoidCallback? onConfig;
+  final Future<LocalInstance?> Function()? onConfig;
   const LocalGameScreen({super.key, required this.inst, this.onConfig});
   @override
   State<LocalGameScreen> createState() => _LocalGameScreenState();
 }
 
 class _LocalGameScreenState extends State<LocalGameScreen> {
-  late final EmuSession s;
+  late EmuSession s;
+  late LocalInstance _inst;
   bool showPad = true, menu = false;
   final GlobalKey<HiddenKeyboardState> _kb = GlobalKey();
 
-  void _config() {
+  Future<void> _config() async {
     final f = widget.onConfig;
-    if (f != null) {
-      f();
-    } else {
+    if (f == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mở Cấu hình từ trang Giả lập')));
+      return;
     }
+    final r = await f();
+    if (r == null || !mounted) return;
+    _rebind(r);
+  }
+
+  /// Chạy lại bằng cấu hình mới (đổi JAR, kích thước...).
+  void _rebind(LocalInstance r) {
+    s.removeListener(_t);
+    s.frame.removeListener(_t);
+    EmuRuntime.close(r.id);
+    _inst = r;
+    s = EmuRuntime.open(r);
+    s.addListener(_t);
+    s.frame.addListener(_t);
+    setState(() {});
+  }
+
+  void _restart() => _rebind(_inst);
+
+  Future<void> _exit() async {
+    final v = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Thoát game?'),
+        content: const Text('Chạy ẩn: game vẫn chạy nền trong app. Thoát: tắt hẳn giả lập này.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Hủy')),
+          TextButton(onPressed: () => Navigator.pop(c, 'hide'), child: const Text('Chạy ẩn')),
+          TextButton(onPressed: () => Navigator.pop(c, 'quit'), child: Text('Thoát', style: TextStyle(color: Jp.danger))),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    if (v == 'quit') {
+      EmuRuntime.close(_inst.id);
+      LocalFloats.close(_inst.id);
+    }
+    Navigator.pop(context);
   }
 
   Color get _bg => Jp.dark ? const Color(0xFF0F0F1A) : const Color(0xFFEEF3F8);
@@ -42,7 +81,8 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
   @override
   void initState() {
     super.initState();
-    s = EmuRuntime.open(widget.inst);
+    _inst = widget.inst;
+    s = EmuRuntime.open(_inst);
     s.addListener(_t);
     s.frame.addListener(_t);
     SharedPrefsLite.load().then((v) { if (mounted) setState(() => showPad = v); });
@@ -75,9 +115,12 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final inst = widget.inst;
+    final inst = _inst;
     final dot = s.error ? Jp.danger : (s.ready ? Jp.success : const Color(0xFFF59E0B));
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) { if (!didPop) _exit(); },
+      child: Scaffold(
       backgroundColor: _bg,
       body: Column(children: [
         Container(
@@ -85,7 +128,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
           padding: EdgeInsets.fromLTRB(2, topInset(context) - 10 < 0 ? 0 : topInset(context) - 10, 14, 6),
           constraints: BoxConstraints(minHeight: 58 + topInset(context) - 10),
           child: Row(children: [
-            IconButton(onPressed: () => Navigator.pop(context), icon: JpIcon(JpIcons.back, color: _title)),
+            IconButton(onPressed: _exit, icon: JpIcon(JpIcons.back, color: _title)),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(inst.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _title)),
               Row(children: [
@@ -144,6 +187,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                                   Text(s.status, textAlign: TextAlign.center, style: TextStyle(color: s.error ? Jp.danger : const Color(0xFF1769D9), fontSize: 13, fontWeight: FontWeight.w600)),
                                 ]),
                               ),
+                            if (s.midp?.screen != null) Positioned.fill(child: MidpScreenView(midp: s.midp!)),
                           ]);
                         }),
                       ),
@@ -159,9 +203,9 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Jp.line), boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))]),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      _toolItem('Khởi động lại', JpIcons.restart2, () { EmuRuntime.close(inst.id); Navigator.pop(context); }),
-                      _toolItem('Cấu hình', JpIcons.tune, () { Navigator.pop(context); _config(); }),
-                      _toolItem('Tắt giả lập', JpIcons.power, () { EmuRuntime.close(inst.id); Navigator.pop(context); }, danger: true),
+                      _toolItem('Khởi động lại', JpIcons.restart2, _restart),
+                      _toolItem('Cấu hình', JpIcons.tune, _config),
+                      _toolItem('Tắt giả lập', JpIcons.power, () { EmuRuntime.close(inst.id); LocalFloats.close(inst.id); Navigator.pop(context); }, danger: true),
                     ]),
                   ),
                 ),
@@ -199,6 +243,6 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
         HiddenKeyboard(key: _kb, onChar: s.typeChar, onKey: (k) => s.keys.key(k, 'press')),
         Container(color: _panel, height: MediaQuery.of(context).padding.bottom),
       ]),
-    );
+    ));
   }
 }
