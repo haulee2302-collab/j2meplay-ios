@@ -766,6 +766,13 @@ class Midp {
       gg(a[0]).g.blit(src, 0, 0, src.w, src.h, 0, ax, ay);
       return 1;
     });
+    vm.reg(GR, 'drawImage', '(Ljavax/microedition/lcdui/Image;III)V', (v, t, a) {
+      if (a[1] == null) throw v.ex('java/lang/NullPointerException');
+      final src = sf(a[1]);
+      final (ax, ay) = Gfx.anchorXY(i(a, 2), i(a, 3), src.w, src.h, i(a, 4));
+      gg(a[0]).g.blit(src, 0, 0, src.w, src.h, 0, ax, ay);
+      return null;
+    });
     vm.reg(GR, 'drawRegion', '(Ljavax/microedition/lcdui/Image;IIIIIIII)V', (v, t, a) {
       if (a[1] == null) throw v.ex('java/lang/NullPointerException');
       final src = sf(a[1]);
