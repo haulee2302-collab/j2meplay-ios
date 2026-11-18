@@ -31,7 +31,7 @@ class PrimaryButton extends StatelessWidget {
         child: loading
             ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: fg))
             : Row(mainAxisSize: MainAxisSize.min, children: [
-                if (icon != null) ...[JpIcon(icon, size: 16), const SizedBox(width: 6)],
+                if (icon != null) ...[JpIcon(icon!, size: 16), const SizedBox(width: 6)],
                 Text(text, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600)),
               ]),
       ),
@@ -60,7 +60,7 @@ class OutlineButton2 extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (icon != null) ...[JpIcon(icon, size: 15), const SizedBox(width: 5)],
+          if (icon != null) ...[JpIcon(icon!, size: 15), const SizedBox(width: 5)],
           Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         ]),
       ),
