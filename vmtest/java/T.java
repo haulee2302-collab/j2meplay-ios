@@ -50,15 +50,16 @@ public class T {
     static double dmix(double a, int b, long c, float f) { return a * b + c - f; }
 
     public static void main(String[] args) throws Exception {
-        // 1. int
         int a = 0x7fffffff, b = -17, c = 5;
+        try {
         p("add", a + 1); p("mul", a * 3); p("sub", Integer.MIN_VALUE - 1);
         p("div", b / c); p("rem", b % c); p("div2", -b / 4); p("rem2", 17 % -5);
         p("shl", b << 3); p("shr", b >> 2); p("ushr", b >>> 28); p("shl33", 1 << 33); p("ushr33", b >>> 33);
         p("and", b & 0xff); p("or", b | 0x100); p("xor", b ^ 0x55); p("neg", -a); p("not", ~c);
         p("i2b", (byte) 200); p("i2c", (int) (char) -1); p("i2s", (short) 70000); p("b2i", (int) (byte) -3);
         int cnt = 0; for (int i = 0; i < 1000; i++) { cnt += i * i; cnt ^= i; } p("loop", cnt);
-        // 2. long
+        } catch (Throwable e) { p("SECTION 1 threw " + e); }
+        try {
         long x = 0x123456789abcdefL, y = -987654321L;
         p("ladd", x + y); p("lmul", lmul(x, y)); p("lmul2", lmul(Long.MAX_VALUE, 3)); p("ldiv", x / y); p("lrem", x % y);
         p("lshl", x << 5); p("lshr", y >> 3); p("lushr", y >>> 40); p("lshl65", 1L << 65);
@@ -67,13 +68,15 @@ public class T {
         p("lstat", lstat); lstat += 7; lstat++; p("lstat2", lstat);
         T t = new T(); t.lf += 100; t.lf++; p("lf", t.lf); t.ifield *= 3; t.ifield++; p("if", t.ifield);
         long[] la = new long[3]; la[1] = x; la[1]++; la[2] += la[1] * 2; p("la", la[2]);
-        // 3. float/double
+        } catch (Throwable e) { p("SECTION 2 threw " + e); }
+        try {
         double d = 10.0 / 3; float f = 1.1f * 3;
         p("dmix", (long) (dmix(d, 3, 100L, f) * 1000));
         p("d2i", (int) 1e20); p("d2i2", (int) -1e20); p("d2i3", (int) 3.99); p("d2i4", (int) -3.99);
         p("f2l", (long) 1e19f); p("drem", (long) (7.5 % 2)); p("dcmp", Double.isNaN(0.0 / 0.0) ? 1 : 0);
         p("sqrt", (long) (Math.sqrt(2) * 1e6)); p("abs", Math.abs(-5)); p("max", Math.max(3, 9)); p("min", Math.min(3L, 9L));
-        // 4. arrays
+        } catch (Throwable e) { p("SECTION 3 threw " + e); }
+        try {
         byte[] ba = new byte[4]; ba[0] = (byte) 255; ba[1] = (byte) 128; ba[2] += 130; p("ba", ba[0] + ba[1] * 100 + ba[2] * 10000);
         char[] ca = new char[3]; ca[0] = 'x'; ca[1] = (char) (ca[0] + 1); ca[2]++; p("ca", ca[0] + ca[1] + ca[2]);
         short[] sa = new short[2]; sa[0] = (short) 40000; sa[1] = (short) (sa[0] * 2); p("sa", sa[0] * 100000L + sa[1]);
@@ -82,7 +85,8 @@ public class T {
         int ix = 0; int[] arr = new int[5]; arr[ix++] = 10; arr[ix++] = 20; arr[ix] = arr[ix - 1] + 5; arr[ix]++; p("ix", arr[0] + arr[1] + arr[2] + ix * 1000);
         int[] sz = new int[2]; System.arraycopy(ia, 0, sz, 0, 2); p("acopy", sz[0] + sz[1]);
         String[][] sm = new String[2][2]; sm[1][1] = "z"; p("sm", sm[1][1] + sm[0][0]);
-        // 5. strings
+        } catch (Throwable e) { p("SECTION 4 threw " + e); }
+        try {
         String s = "Xin chào Việt Nam";
         p("len", s.length()); p("charAt", s.charAt(5)); p("idx", s.indexOf("Việt")); p("sub", s.substring(4, 8)); p("up", s.toUpperCase());
         p("tca", new String(s.toCharArray(), 0, 3)); p("eq", "ab".equals("a" + "b") ? "y" : "n"); p("cmp", "apple".compareTo("banana"));
@@ -97,7 +101,8 @@ public class T {
         p("concat", "a" + 1 + 2L + 'c' + 1.5f + null + true);
         switch (a & 3) { case 0: p("sw", "zero"); break; case 3: p("sw", "three"); break; default: p("sw", "def"); }
         switch (b) { case -17: p("sw2", "m17"); break; case 1000: p("sw2", "k"); break; default: p("sw2", "no"); }
-        // 6. exceptions
+        } catch (Throwable e) { p("SECTION 5 threw " + e); }
+        try {
         for (int i = 0; i < 3; i++) {
             try { p("thr", thrower(i)); } catch (MyEx e) { p("caught " + e.getMessage() + e.code); } catch (RuntimeException e) { p("rt " + e.getMessage()); } finally { p("fin" + i); }
         }
@@ -108,26 +113,32 @@ public class T {
         try { try { throw new RuntimeException("inner"); } finally { p("f1"); } } catch (Exception e) { p("outer " + e.getMessage()); }
         try { Integer.parseInt("zz"); } catch (NumberFormatException e) { p("nfe"); }
         try { new int[-1].toString(); } catch (NegativeArraySizeException e) { p("nase"); }
-        // 7. objects
+        } catch (Throwable e) { p("SECTION 6 threw " + e); }
+        try {
         Base r = new Rect(); p("area", r.area()); p("ts", r.toString()); Shape sh = r; p("ish", sh.area());
         p("inst", (r instanceof Rect ? 1 : 0) + (r instanceof Shape ? 10 : 0) + (sh instanceof Base ? 100 : 0));
         p("lazy0", "before"); p("lazy", Lazy.get());
         Runnable rn = new Runnable() { public void run() { p("anon run " + sfield); } }; rn.run();
         Object[] objs = { new Integer(3), "str", new int[1], null }; int q = 0; for (int i = 0; i < objs.length; i++) { if (objs[i] instanceof Integer) q += 1; if (objs[i] instanceof String) q += 10; if (objs[i] instanceof int[]) q += 100; } p("objs", q);
-        // 8. collections / util
+        } catch (Throwable e) { p("SECTION 7 threw " + e); }
+        try {
         java.util.Vector v = new java.util.Vector(); v.addElement("a"); v.addElement(new Integer(2)); v.insertElementAt("z", 0); p("vec", v.size() + "" + v.elementAt(0) + v.elementAt(2));
         java.util.Hashtable h = new java.util.Hashtable(); h.put("k", new Integer(9)); h.put("j", "v"); p("ht", h.size() + "" + h.get("k") + h.get("j") + h.containsKey("q"));
         java.util.Random rnd = new java.util.Random(12345); p("rnd", rnd.nextInt() + ":" + rnd.nextInt(100) + ":" + rnd.nextLong());
         java.util.Enumeration en = v.elements(); int ec = 0; while (en.hasMoreElements()) { en.nextElement(); ec++; } p("enum", ec);
-        // 9. threads
+        } catch (Throwable e) { p("SECTION 8 threw " + e); }
+        try {
         final int[] shared = new int[1]; final Object lock = new Object();
         Thread[] th = new Thread[3];
         for (int i = 0; i < 3; i++) { th[i] = new Thread(new Runnable() { public void run() { for (int j = 0; j < 100; j++) { synchronized (lock) { shared[0]++; } Thread.yield(); } } }); th[i].start(); }
         for (int i = 0; i < 3; i++) th[i].join(); p("threads", shared[0]);
-        // 10. misc
+        } catch (Throwable e) { p("SECTION 9 threw " + e); }
+        try {
         p("sfield", sfield++ + ++sfield); p("tern", a > 0 ? "pos" : "neg"); p("cmpchain", (1 < 2 && 3 > 2 || 5 == 6) ? 1 : 0);
         int w = 3; w <<= 2; w ^= 5; w >>>= 1; w %= 4; p("w", w);
         long ll = 5; ll <<= 33; ll |= 3; ll >>= 1; ll *= -3; p("ll", ll);
         p("done", "ok");
+        } catch (Throwable e) { p("SECTION 10 threw " + e); }
     }
 }
+
