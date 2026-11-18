@@ -30,7 +30,22 @@ int _now() => DateTime.now().millisecondsSinceEpoch;
 
 /// Một phiên xem màn hình J2ME (bản Dart của GameConnection.kt):
 /// vé VIEW (web) → thông tin xem (máy chủ J2ME) → websocket JPC1 → giải nén → hàng đợi → vẽ → ack.
-class GameConnection extends ChangeNotifier {
+/// Nơi nhận phím / chữ: một phiên (GameConnection) hoặc nhiều phiên cùng lúc (trang Xem tất cả).
+abstract class KeyTarget {
+  bool key(String key, String phase);
+  bool sendInputNow(Map<String, dynamic> payload);
+}
+
+class MultiKeyTarget implements KeyTarget {
+  final List<KeyTarget> Function() targets;
+  MultiKeyTarget(this.targets);
+  @override
+  bool key(String key, String phase) => targets().map((t) => t.key(key, phase)).any((b) => b);
+  @override
+  bool sendInputNow(Map<String, dynamic> payload) => targets().map((t) => t.sendInputNow(Map<String, dynamic>.from(payload))).any((b) => b);
+}
+
+class GameConnection extends ChangeNotifier implements KeyTarget {
   final String rentalId;
   GameConnection(this.rentalId);
 
@@ -519,6 +534,7 @@ class GameConnection extends ChangeNotifier {
   }
 
   /// Gửi thao tác không chờ (phím giữ / chạm).
+  @override
   bool sendInputNow(Map<String, dynamic> payload) {
     final ws = _socket;
     if (ws == null || !ready) return false;
@@ -526,6 +542,7 @@ class GameConnection extends ChangeNotifier {
     return true;
   }
 
+  @override
   bool key(String key, String phase) => sendInputNow({'type': 'key', 'key': key, 'phase': phase});
   bool touch(String phase, double x, double y) => sendInputNow({'type': 'touch', 'phase': phase, 'x': x, 'y': y});
   Future<bool> keyTap(String key) async => (await sendInput({'type': 'key', 'key': key, 'phase': 'tap'})) != null;

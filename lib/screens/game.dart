@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../game/connection.dart';
+import '../game/keypad.dart';
 import '../game/midp.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -204,75 +205,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             ),
           ]),
         ),
-        if (showPad) _Keypad(conn),
+        if (showPad) Keypad(conn),
         SizedBox(height: MediaQuery.of(context).padding.bottom),
       ]),
     );
   }
-}
-
-/// Bàn phím ảo J2ME: phím mềm, OK, D-pad, 0-9 * #. Giữ phím = gửi down, nhả = gửi up.
-class _Keypad extends StatelessWidget {
-  final GameConnection conn;
-  const _Keypad(this.conn);
-
-  Widget _k(String key, {String label = '', bool primary = false, IconData? icon}) => Padding(
-        padding: const EdgeInsets.all(3),
-        child: _Hold(
-          conn: conn,
-          keyName: key,
-          child: Container(
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: primary ? Jp.primary : Jp.primarySoft,
-              borderRadius: BorderRadius.circular(10),
-              border: primary ? null : Border.all(color: Jp.lineStrong),
-            ),
-            child: icon != null
-                ? Icon(icon, size: 20, color: primary ? Colors.white : Jp.primary)
-                : Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: primary ? Colors.white : Jp.primary)),
-          ),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    Widget row(List<Widget> k) => Row(children: [for (final w in k) Expanded(child: w)]);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(child: Column(children: [
-          row([_k('SOFT1', icon: Icons.chevron_left), _k('OK', label: 'OK', primary: true), _k('SOFT2', icon: Icons.chevron_right)]),
-          row([_k('1', label: '1'), _k('2', label: '2'), _k('3', label: '3')]),
-          row([_k('4', label: '4'), _k('5', label: '5'), _k('6', label: '6')]),
-          row([_k('7', label: '7'), _k('8', label: '8'), _k('9', label: '9')]),
-          row([_k('STAR', label: '*'), _k('0', label: '0'), _k('HASH', label: '#')]),
-        ])),
-        const SizedBox(width: 12),
-        SizedBox(width: 150, child: Column(children: [
-          row([_k('SOFT1', icon: Icons.drag_handle), _k('UP', icon: Icons.keyboard_arrow_up), _k('SOFT2', icon: Icons.drag_handle)]),
-          row([_k('LEFT', icon: Icons.keyboard_arrow_left), _k('OK', label: 'OK', primary: true), _k('RIGHT', icon: Icons.keyboard_arrow_right)]),
-          row([_k('BACK', icon: Icons.undo), _k('DOWN', icon: Icons.keyboard_arrow_down), _k('BACKSPACE', icon: Icons.backspace_outlined)]),
-        ])),
-      ]),
-    );
-  }
-}
-
-class _Hold extends StatelessWidget {
-  final GameConnection conn;
-  final String keyName;
-  final Widget child;
-  const _Hold({required this.conn, required this.keyName, required this.child});
-  @override
-  Widget build(BuildContext context) => Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: (_) => conn.key(keyName, 'down'),
-        onPointerUp: (_) => conn.key(keyName, 'up'),
-        onPointerCancel: (_) => conn.key(keyName, 'up'),
-        child: child,
-      );
 }
 
 // ---------------- Chọn JAR ----------------

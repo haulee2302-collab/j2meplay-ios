@@ -21,7 +21,13 @@ class Rental {
   final String id, deviceName, status;
   final int endsAt, screenWidth, screenHeight;
   final String? machineStatus, productName, connectionStatus;
-  Rental(this.id, this.deviceName, this.status, this.endsAt, this.machineStatus, this.productName, this.connectionStatus, this.screenWidth, this.screenHeight);
+  final bool autoRenew;
+  Rental(this.id, this.deviceName, this.status, this.endsAt, this.machineStatus, this.productName, this.connectionStatus, this.screenWidth, this.screenHeight, [this.autoRenew = false]);
+
+  int get endsMs => endsAt <= 0 ? 0 : (endsAt < 100000000000 ? endsAt * 1000 : endsAt);
+  bool get expired => endsMs > 0 && endsMs <= DateTime.now().millisecondsSinceEpoch;
+  bool get poweredOff => status == 'powered_off';
+  bool get viewable => !expired && !poweredOff;
   factory Rental.from(Map<String, dynamic> o) {
     final screen = o['screen'] as Map<String, dynamic>?;
     int n(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
@@ -35,6 +41,7 @@ class Rental {
       '${o['connectionStatus'] ?? ''}',
       n(screen?['width']),
       n(screen?['height']),
+      (o['autoRenew'] is Map) && (o['autoRenew'] as Map)['enabled'] == true,
     );
   }
 }
@@ -189,6 +196,21 @@ class Api {
   }
 
   /// POST thô cho các thao tác phụ (đổi mật khẩu...). Trả (mã, json, phản hồi).
+  /// Ảnh chụp màn hình hiện tại của máy (thẻ phiên). null = máy chưa sẵn sàng.
+  Future<List<int>?> screenShot(String rentalId) async {
+    try {
+      final key = base64Url.encode(List<int>.generate(32, (i) => (i * 37 + DateTime.now().microsecondsSinceEpoch) & 255)).replaceAll('=', '');
+      final req = http.Request('POST', Uri.parse('$base/api/site/rentals/${Uri.encodeComponent(rentalId)}/screen'))
+        ..headers.addAll(_headers)
+        ..body = jsonEncode({'viewKey': key});
+      final res = await http.Response.fromStream(await req.send().timeout(const Duration(seconds: 8)));
+      if (res.statusCode != 200 || res.bodyBytes.isEmpty) return null;
+      return res.bodyBytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<(int, Map<String, dynamic>?, dynamic)> rawGet(String path) => _send('GET', path);
 
   Future<(int, Map<String, dynamic>?, dynamic)> rawPost(String path, Map<String, dynamic> body) => _send('POST', path, body);

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../api.dart';
 import '../theme.dart';
-import 'rentals.dart';
+import 'deposit.dart';
+import 'emulator.dart';
 import 'jars.dart';
 import 'profile.dart';
+import 'rentals.dart';
 
-/// Khung chính: thanh menu dưới 4 mục (Phiên thuê, Kho JAR, Nạp tiền, Tài khoản) như bản Android.
-/// Mục "Giả lập" (chạy JAR trên máy) không có trên iOS vì iOS không cho chạy máy ảo Java.
+/// Khung chính: thanh menu dưới 5 mục (Phiên thuê, Kho JAR, Nạp tiền, Giả lập, Tài khoản) như bản Android.
 class MainShell extends StatefulWidget {
   final VoidCallback onLogout;
   const MainShell({super.key, required this.onLogout});
@@ -16,22 +15,28 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int tab = 0;
+  int tab = 0; // 0 Phiên thuê, 1 Kho JAR, 3 Giả lập, 2 Tài khoản
+  int reload = 0;
+
+  Future<void> _deposit() async {
+    final paid = await showDeposit(context);
+    if (paid && mounted) setState(() => reload++);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pages = <Widget>[
-      RentalsScreen(onLogout: widget.onLogout),
-      const JarsScreen(),
-      ProfileScreen(onLogout: widget.onLogout, onOpenRentals: () => setState(() => tab = 0)),
-    ];
-    final index = tab == 3 ? 2 : tab; // tab 3 = Tài khoản, ánh xạ về trang 2
+    final pages = <int, Widget>{
+      0: RentalsScreen(key: ValueKey('r$reload'), onLogout: widget.onLogout),
+      1: const JarsScreen(),
+      2: ProfileScreen(key: ValueKey('p$reload'), onLogout: widget.onLogout, onOpenRentals: () => setState(() => tab = 0)),
+      3: EmulatorScreen(onOpenRentals: () => setState(() => tab = 0), onOpenJars: () => setState(() => tab = 1)),
+    };
     return PopScope(
       canPop: tab == 0,
       onPopInvokedWithResult: (didPop, _) { if (!didPop) setState(() => tab = 0); },
       child: Scaffold(
         backgroundColor: Jp.bgFaint,
-        body: IndexedStack(index: index, children: pages),
+        body: IndexedStack(index: tab, children: [pages[0]!, pages[1]!, pages[2]!, pages[3]!]),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(color: Jp.surface, border: Border(top: BorderSide(color: Jp.line))),
           child: SafeArea(
@@ -41,8 +46,9 @@ class _MainShellState extends State<MainShell> {
               child: Row(children: [
                 _item('Phiên thuê', Icons.dns_outlined, 0),
                 _item('Kho JAR', Icons.folder_zip_outlined, 1),
-                _deposit(),
-                _item('Tài khoản', Icons.person_outline, 3),
+                _depositItem(),
+                _item('Giả lập', Icons.sports_esports_outlined, 3),
+                _item('Tài khoản', Icons.person_outline, 2),
               ]),
             ),
           ),
@@ -67,13 +73,12 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _deposit() {
+  Widget _depositItem() {
     return Expanded(
       child: InkWell(
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
-        // Nạp tiền qua chuyển khoản ngân hàng trên website (trang nạp của tài khoản đang đăng nhập).
-        onTap: () => launchUrl(Uri.parse('${Api.instance.base}/deposit'), mode: LaunchMode.externalApplication),
+        onTap: _deposit,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Container(width: 36, height: 36, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle), child: const Icon(Icons.attach_money, color: Colors.white, size: 20)),
           const Text('Nạp tiền', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Jp.primary)),
