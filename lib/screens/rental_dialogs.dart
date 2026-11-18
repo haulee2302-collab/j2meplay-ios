@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../icons.dart';
 
 import '../api.dart';
 import '../theme.dart';
@@ -31,7 +32,7 @@ class _Choice extends StatelessWidget {
             border: Border.all(color: selected ? Jp.primary : Jp.line, width: selected ? 2 : 1),
           ),
           child: Row(children: [
-            Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20, color: selected ? Jp.primary : Jp.muted),
+            JpIcon(selected ? JpIcons.radioOn : JpIcons.radioOff, size: 20, color: selected ? Jp.primary : Jp.muted),
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Jp.text)),
@@ -220,9 +221,9 @@ class _ExtendDialogState extends State<_ExtendDialog> {
         for (final p in widget.products) _Choice(p.name, '${p.durationDays} ngày · ${money(p.price)}', p.id == sel?.id, () { setState(() => sel = p); _preview(); }),
         Row(children: [
           Expanded(child: Text('Số chu kỳ ($days ngày)', style: TextStyle(color: Jp.muted, fontSize: 14))),
-          IconButton(onPressed: cycles > 1 ? () { setState(() => cycles--); _preview(); } : null, icon: const Icon(Icons.remove_circle_outline)),
+          IconButton(onPressed: cycles > 1 ? () { setState(() => cycles--); _preview(); } : null, icon: const JpIcon(JpIcons.remove)),
           Text('$cycles', style: TextStyle(fontWeight: FontWeight.w700, color: Jp.text)),
-          IconButton(onPressed: () { setState(() => cycles++); _preview(); }, icon: const Icon(Icons.add_circle_outline)),
+          IconButton(onPressed: () { setState(() => cycles++); _preview(); }, icon: const JpIcon(JpIcons.add)),
         ]),
         Container(
           width: double.infinity,

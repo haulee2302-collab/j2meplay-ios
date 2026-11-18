@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import 'package:flutter/services.dart';
 
 import '../theme.dart';
@@ -396,7 +397,7 @@ class _FormViewState extends State<_FormView> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(children: [
-                  Icon(multiple ? (on ? Icons.check_box : Icons.check_box_outline_blank) : (on ? Icons.radio_button_checked : Icons.radio_button_unchecked), color: on ? Jp.primary : Jp.muted, size: 22),
+                  JpIcon(multiple ? (on ? JpIcons.boxOn : JpIcons.boxOff) : (on ? JpIcons.radioOn : JpIcons.radioOff), color: on ? Jp.primary : Jp.muted, size: 22),
                   const SizedBox(width: 8),
                   Expanded(child: Text('${opts[o]}', style: TextStyle(fontSize: 14, color: Jp.text))),
                 ]),
@@ -518,7 +519,7 @@ class _ListViewState extends State<_ListView> {
             final icon = _icon('${o['icon'] ?? ''}');
             Widget lead;
             if (!implicit) {
-              lead = Icon(multiple ? (sel ? Icons.check_box : Icons.check_box_outline_blank) : (sel ? Icons.radio_button_checked : Icons.radio_button_unchecked), color: sel ? Jp.primary : Jp.muted, size: 22);
+              lead = JpIcon(multiple ? (sel ? JpIcons.boxOn : JpIcons.boxOff) : (sel ? JpIcons.radioOn : JpIcons.radioOff), color: sel ? Jp.primary : Jp.muted, size: 22);
             } else if (icon != null) {
               lead = Image.memory(icon, width: 28, height: 28, filterQuality: FilterQuality.none);
             } else {

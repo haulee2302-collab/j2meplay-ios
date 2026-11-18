@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import 'package:flutter/services.dart';
 
 import '../api.dart';
@@ -100,7 +101,7 @@ class _DepositSheetState extends State<_DepositSheet> {
           if (canCopy && v.isNotEmpty)
             InkWell(
               onTap: () => _copy(label, v),
-              child: Padding(padding: const EdgeInsets.only(left: 8), child: Icon(copied == label ? Icons.check : Icons.copy, size: 16, color: copied == label ? Jp.success : Jp.primary)),
+              child: Padding(padding: const EdgeInsets.only(left: 8), child: JpIcon(copied == label ? JpIcons.check : JpIcons.copy, size: 16, color: copied == label ? Jp.success : Jp.primary)),
             ),
         ]),
       );
@@ -190,7 +191,7 @@ class _DepositSheetState extends State<_DepositSheet> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: Jp.lineStrong)),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Container(width: 56, height: 56, decoration: const BoxDecoration(color: Jp.success, shape: BoxShape.circle), child: const Icon(Icons.check, color: Colors.white, size: 30)),
+                Container(width: 56, height: 56, decoration: const BoxDecoration(color: Jp.success, shape: BoxShape.circle), child: const JpIcon(JpIcons.check, color: Colors.white, size: 30)),
                 const SizedBox(height: 12),
                 Text('Nạp tiền thành công', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Jp.text)),
                 Text('+${money((((success!['totalAmount'] ?? success!['amount']) ?? 0) as num).toInt())}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Jp.success)),

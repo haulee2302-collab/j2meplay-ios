@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import '../api.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -106,7 +107,7 @@ class _JarsScreenState extends State<JarsScreen> {
         HeroHeader(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Container(width: 42, height: 42, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.folder_zip_outlined, color: Colors.white)),
+              Container(width: 42, height: 42, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const JpIcon(JpIcons.toolJar, color: Colors.white)),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Của bạn', style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
@@ -121,7 +122,7 @@ class _JarsScreenState extends State<JarsScreen> {
             const SizedBox(height: 6),
             Text('Tệp được giữ $retention ngày kể từ lần dùng gần nhất.', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
             const SizedBox(height: 12),
-            PrimaryButton('Tải JAR lên', busy == null ? pick : null, loading: busy != null, icon: Icons.upload_file, container: Colors.white, content: Jp.primary, height: 40, fontSize: 13),
+            PrimaryButton('Tải JAR lên', busy == null ? pick : null, loading: busy != null, icon: JpIcons.navUpload, container: Colors.white, content: Jp.primary, height: 40, fontSize: 13),
           ]),
         ),
         Padding(padding: const EdgeInsets.fromLTRB(16, 18, 16, 8), child: SectionTitle('Tệp JAR của bạn', count: jars.length)),
@@ -135,14 +136,14 @@ class _JarsScreenState extends State<JarsScreen> {
             padding: const EdgeInsets.all(12),
             decoration: cardDeco(),
             child: Row(children: [
-              Container(width: 40, height: 40, decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.sports_esports, color: Jp.primary, size: 22)),
+              Container(width: 40, height: 40, decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(10)), child: const JpIcon(JpIcons.gamepad, color: Jp.primary, size: 22)),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(j.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, color: Jp.text)),
                 Text(fmtSize(j.size), style: TextStyle(fontSize: 12, color: Jp.muted)),
               ])),
-              IconButton(onPressed: () => rename(j), icon: const Icon(Icons.edit_outlined, size: 19, color: Jp.primary)),
-              IconButton(onPressed: () => remove(j), icon: const Icon(Icons.delete_outline, size: 19, color: Jp.danger)),
+              IconButton(onPressed: () => rename(j), icon: const JpIcon(JpIcons.edit, size: 19, color: Jp.primary)),
+              IconButton(onPressed: () => remove(j), icon: const JpIcon(JpIcons.trash, size: 19, color: Jp.danger)),
             ]),
           ),
         const SizedBox(height: 28),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../icons.dart';
 
 import '../api.dart';
 import '../game/connection.dart';
@@ -108,12 +109,12 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
               child: Row(children: [
-                IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.arrow_back, color: Jp.text)),
+                IconButton(onPressed: () => Navigator.pop(context), icon: JpIcon(JpIcons.back, color: Jp.text)),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Xem tất cả (${rs.length})', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Jp.text)),
                   Text(rs[main].deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Jp.muted)),
                 ])),
-                IconButton(onPressed: () => setState(() => showPad = !showPad), icon: Icon(Icons.gamepad_outlined, color: showPad ? Jp.primary : Jp.text)),
+                IconButton(onPressed: () => setState(() => showPad = !showPad), icon: JpIcon(JpIcons.gamepad, color: showPad ? Jp.primary : Jp.text)),
               ]),
             ),
           ),

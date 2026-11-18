@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -190,9 +191,9 @@ class _LoginScreenState extends State<LoginScreen> {
         if (error != null) MessageBanner(error!),
         if (notice != null) MessageBanner(notice!, error: false),
         if (needVerify) TextButton(onPressed: resend, child: const Text('Gửi lại email xác minh', style: TextStyle(color: Jp.primary, fontWeight: FontWeight.w600))),
-        JpField('Email', email, Icons.mail_outline, placeholder: 'ten@example.com', keyboard: TextInputType.emailAddress),
+        JpField('Email', email, JpIcons.mail, placeholder: 'ten@example.com', keyboard: TextInputType.emailAddress),
         const SizedBox(height: 12),
-        JpField('Mật khẩu', pass, Icons.lock_outline, placeholder: 'Nhập mật khẩu', password: true, action: TextInputAction.done, onSubmit: submit),
+        JpField('Mật khẩu', pass, JpIcons.lock, placeholder: 'Nhập mật khẩu', password: true, action: TextInputAction.done, onSubmit: submit),
         const SizedBox(height: 18),
         SizedBox(width: double.infinity, child: PrimaryButton('Đăng nhập', () => submit(), loading: busy, height: 50)),
         const OrDivider(),
@@ -271,7 +272,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: to != null
           ? [
               Center(child: Column(children: [
-                Container(width: 60, height: 60, decoration: BoxDecoration(color: Jp.primarySoft, shape: BoxShape.circle), child: const Icon(Icons.mail_outline, color: Jp.primary, size: 30)),
+                Container(width: 60, height: 60, decoration: BoxDecoration(color: Jp.primarySoft, shape: BoxShape.circle), child: const JpIcon(JpIcons.mail, color: Jp.primary, size: 30)),
                 Padding(padding: const EdgeInsets.only(top: 14), child: Text('Kiểm tra email của bạn', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: Jp.text))),
                 Padding(padding: const EdgeInsets.only(top: 6, bottom: 16), child: Text('Đã gửi liên kết xác minh đến $to. Bấm vào liên kết trong thư rồi quay lại đăng nhập.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Jp.muted))),
                 if (resendMsg != null) MessageBanner(resendMsg!, error: false),
@@ -296,11 +297,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               GoogleButton('Đăng ký với Google', busy ? null : () => googleFlow(context, onError: (e) => setState(() => error = e), onDone: () { back(); widget.onLoggedIn(); }, busy: (b) => setState(() => gbusy = b)), loading: gbusy),
               Padding(padding: const EdgeInsets.only(top: 6), child: Text('Đăng ký bằng Google là bạn đồng ý với Điều khoản sử dụng và Chính sách bảo mật.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Jp.muted))),
               const OrDivider(),
-              JpField('Email', email, Icons.mail_outline, placeholder: 'ten@example.com', keyboard: TextInputType.emailAddress),
+              JpField('Email', email, JpIcons.mail, placeholder: 'ten@example.com', keyboard: TextInputType.emailAddress),
               const SizedBox(height: 10),
-              JpField('Mật khẩu', pass, Icons.lock_outline, placeholder: 'Ít nhất 8 ký tự', password: true),
+              JpField('Mật khẩu', pass, JpIcons.lock, placeholder: 'Ít nhất 8 ký tự', password: true),
               const SizedBox(height: 10),
-              JpField('Nhập lại mật khẩu', confirm, Icons.lock_outline, placeholder: 'Nhập lại mật khẩu', password: true, action: TextInputAction.done, onSubmit: submit),
+              JpField('Nhập lại mật khẩu', confirm, JpIcons.lock, placeholder: 'Nhập lại mật khẩu', password: true, action: TextInputAction.done, onSubmit: submit),
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

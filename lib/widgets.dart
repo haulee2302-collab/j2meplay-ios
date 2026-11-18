@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'icons.dart';
 import 'theme.dart';
 
 class PrimaryButton extends StatelessWidget {
   final String text;
   final VoidCallback? onTap;
   final bool loading;
-  final IconData? icon;
+  final JpIconData? icon;
   final double height;
   final double fontSize;
   final Color? container;
@@ -30,7 +31,7 @@ class PrimaryButton extends StatelessWidget {
         child: loading
             ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: fg))
             : Row(mainAxisSize: MainAxisSize.min, children: [
-                if (icon != null) ...[Icon(icon, size: 16), const SizedBox(width: 6)],
+                if (icon != null) ...[JpIcon(icon, size: 16), const SizedBox(width: 6)],
                 Text(text, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600)),
               ]),
       ),
@@ -41,7 +42,7 @@ class PrimaryButton extends StatelessWidget {
 class OutlineButton2 extends StatelessWidget {
   final String text;
   final VoidCallback? onTap;
-  final IconData? icon;
+  final JpIconData? icon;
   final double height;
   final Color? color;
   const OutlineButton2(this.text, this.onTap, {super.key, this.icon, this.height = 38, this.color});
@@ -59,7 +60,7 @@ class OutlineButton2 extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (icon != null) ...[Icon(icon, size: 15), const SizedBox(width: 5)],
+          if (icon != null) ...[JpIcon(icon, size: 15), const SizedBox(width: 5)],
           Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         ]),
       ),
@@ -113,7 +114,7 @@ class ThemeToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: Jp.toggle,
-      icon: Icon(Jp.dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: Colors.white),
+      icon: JpIcon(Jp.dark ? JpIcons.sun : JpIcons.moon, color: Colors.white),
     );
   }
 }
@@ -176,7 +177,7 @@ Future<bool> confirmDialog(BuildContext context, String title, String body, {Str
 class JpField extends StatefulWidget {
   final String label, placeholder;
   final TextEditingController controller;
-  final IconData icon;
+  final JpIconData icon;
   final bool password;
   final TextInputType keyboard;
   final TextInputAction action;
@@ -206,9 +207,9 @@ class _JpFieldState extends State<JpField> {
         decoration: InputDecoration(
           hintText: widget.placeholder,
           hintStyle: TextStyle(color: Jp.muted, fontSize: 15),
-          prefixIcon: Icon(widget.icon, size: 20, color: Jp.muted),
+          prefixIcon: JpIcon(widget.icon, size: 20, color: Jp.muted),
           suffixIcon: widget.password
-              ? IconButton(icon: Icon(visible ? Icons.visibility : Icons.visibility_outlined, size: 20, color: visible ? Jp.primary : Jp.muted), onPressed: () => setState(() => visible = !visible))
+              ? IconButton(icon: JpIcon(visible ? JpIcons.eye : JpIcons.eye, size: 20, color: visible ? Jp.primary : Jp.muted), onPressed: () => setState(() => visible = !visible))
               : null,
           filled: true,
           fillColor: Jp.surface,
@@ -330,4 +331,40 @@ class GoogleButton extends StatelessWidget {
                 ]),
         ),
       );
+}
+
+/// Đầu trang nền tím: nhãn nhỏ + tiêu đề lớn + mô tả + nút sáng/tối (giống PageHead của Android).
+class PageHead extends StatelessWidget {
+  final String eyebrow, title, desc;
+  final Widget? action;
+  const PageHead(this.eyebrow, this.title, this.desc, {super.key, this.action});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(gradient: Jp.heroBrush, borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28))),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+        child: Stack(children: [
+          Positioned(top: -50, right: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(padding: const EdgeInsets.only(right: 40), child: Text(eyebrow, style: const TextStyle(color: Jp.highlight, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1))),
+                  Padding(padding: const EdgeInsets.only(top: 2, right: 40), child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900))),
+                  Padding(padding: const EdgeInsets.only(top: 4), child: Text(desc, style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 12, height: 1.4))),
+                ])),
+                if (action != null) action!,
+              ]),
+            ),
+          ),
+          const Positioned(top: 0, right: 4, child: SafeArea(bottom: false, child: ThemeToggle())),
+        ]),
+      ),
+    );
+  }
 }

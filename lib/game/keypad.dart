@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme.dart';
@@ -80,13 +81,13 @@ class _KeypadState extends State<Keypad> {
   Widget _swap(VoidCallback onTap) => InkResponse(
         onTap: onTap,
         radius: 16,
-        child: const SizedBox(width: 26, height: 26, child: Icon(Icons.swap_horiz, size: 16, color: Jp.primary)),
+        child: const SizedBox(width: 26, height: 26, child: JpIcon(JpIcons.swap, size: 16, color: Jp.primary)),
       );
 
   @override
   Widget build(BuildContext context) {
     final t = widget.target;
-    Widget key(String k, String label, {String sub = '', bool primary = false, IconData? icon, bool multi = false}) => Expanded(
+    Widget key(String k, String label, {String sub = '', bool primary = false, JpIconData? icon, bool multi = false}) => Expanded(
           child: Padding(
             padding: const EdgeInsets.all(2.5),
             child: _Hold(
@@ -100,7 +101,7 @@ class _KeypadState extends State<Keypad> {
                   border: primary ? null : Border.all(color: Jp.lineStrong),
                 ),
                 child: icon != null
-                    ? Icon(icon, size: 17, color: primary ? Colors.white : Jp.primary)
+                    ? JpIcon(icon, size: 17, color: primary ? Colors.white : Jp.primary)
                     : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                         Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: primary ? Colors.white : Jp.primary)),
                         if (sub.isNotEmpty) ...[const SizedBox(width: 3), Text(sub, style: TextStyle(fontSize: 7, color: Jp.muted))],
@@ -119,15 +120,15 @@ class _KeypadState extends State<Keypad> {
             row([for (final d in ['7', '8', '9']) key(d, d, sub: _subs[d]!, multi: true)]),
           ]
         : [
-            row([key('SOFT1', '', icon: Icons.chevron_left), key('OK', 'OK', primary: true), key('SOFT2', '', icon: Icons.chevron_right)]),
+            row([key('SOFT1', '', icon: JpIcons.chevronLeft), key('OK', 'OK', primary: true), key('SOFT2', '', icon: JpIcons.chevronRight)]),
             row([key('STAR', '*'), key('0', '0', sub: '␣', multi: true), key('HASH', '#')]),
           ];
 
     final right = dpad
         ? [
-            row([key('SOFT1', '', icon: Icons.drag_handle), key('UP', '', icon: Icons.keyboard_arrow_up), key('SOFT2', '', icon: Icons.drag_handle)]),
-            row([key('LEFT', '', icon: Icons.keyboard_arrow_left), key('OK', 'OK', primary: true), key('RIGHT', '', icon: Icons.keyboard_arrow_right)]),
-            row([key('BACK', '', icon: Icons.undo), key('DOWN', '', icon: Icons.keyboard_arrow_down), key('BACKSPACE', '', icon: Icons.backspace_outlined)]),
+            row([key('SOFT1', '', icon: JpIcons.dragHandle), key('UP', '', icon: JpIcons.chevronUp), key('SOFT2', '', icon: JpIcons.dragHandle)]),
+            row([key('LEFT', '', icon: JpIcons.chevronLeft), key('OK', 'OK', primary: true), key('RIGHT', '', icon: JpIcons.chevronRight)]),
+            row([key('BACK', '', icon: JpIcons.undo), key('DOWN', '', icon: JpIcons.chevronDown), key('BACKSPACE', '', icon: JpIcons.erase)]),
           ]
         : null;
 

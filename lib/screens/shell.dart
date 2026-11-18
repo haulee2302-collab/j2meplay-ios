@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import '../theme.dart';
 import 'deposit.dart';
 import 'emulator.dart';
@@ -44,11 +45,11 @@ class _MainShellState extends State<MainShell> {
             child: SizedBox(
               height: 58,
               child: Row(children: [
-                _item('Phiên thuê', Icons.dns_outlined, 0),
-                _item('Kho JAR', Icons.folder_zip_outlined, 1),
+                _item('Phiên thuê', JpIcons.navRentals, 0),
+                _item('Kho JAR', JpIcons.toolJar, 1),
                 _depositItem(),
-                _item('Giả lập', Icons.sports_esports_outlined, 3),
-                _item('Tài khoản', Icons.person_outline, 2),
+                _item('Giả lập', JpIcons.gamepad, 3),
+                _item('Tài khoản', JpIcons.navUser, 2),
               ]),
             ),
           ),
@@ -57,7 +58,7 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _item(String label, IconData icon, int i) {
+  Widget _item(String label, JpIconData icon, int i) {
     final on = tab == i;
     return Expanded(
       child: InkWell(
@@ -65,7 +66,7 @@ class _MainShellState extends State<MainShell> {
         highlightColor: Colors.transparent,
         onTap: () => setState(() => tab = i),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 22, color: on ? Jp.primary : Jp.muted),
+          JpIcon(icon, size: 22, color: on ? Jp.primary : Jp.muted),
           const SizedBox(height: 2),
           Text(label, style: TextStyle(fontSize: 11, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: on ? Jp.primary : Jp.muted)),
         ]),
@@ -80,7 +81,7 @@ class _MainShellState extends State<MainShell> {
         highlightColor: Colors.transparent,
         onTap: _deposit,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Container(width: 36, height: 36, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle), child: const Icon(Icons.attach_money, color: Colors.white, size: 20)),
+          Container(width: 36, height: 36, decoration: const BoxDecoration(color: Jp.primary, shape: BoxShape.circle), child: const JpIcon(JpIcons.navDollar, color: Colors.white, size: 20)),
           const Text('Nạp tiền', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Jp.primary)),
         ]),
       ),

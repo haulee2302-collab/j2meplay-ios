@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../icons.dart';
 
 import '../theme.dart';
 import '../widgets.dart';
@@ -27,7 +28,7 @@ class EmulatorScreen extends StatelessWidget {
         decoration: cardDeco(radius: 14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Container(width: 40, height: 40, decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.gamepad, color: Jp.primary)),
+            Container(width: 40, height: 40, decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(10)), child: const JpIcon(JpIcons.gamepad, color: Jp.primary)),
             const SizedBox(width: 12),
             Expanded(child: Text('Chạy JAR trực tiếp chưa hỗ trợ trên iPhone', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Jp.text))),
           ]),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import '../api.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -118,10 +119,10 @@ class _RentalsScreenState extends State<RentalsScreen> {
   void openMenu(Rental r) {
     final off = r.poweredOff;
     final canPlay = r.viewable && r.status != 'provisioning' && r.status != 'powering_off';
-    Widget item(IconData icon, String text, VoidCallback f, {bool enabled = true, bool danger = false}) => ListTile(
+    Widget item(JpIconData icon, String text, VoidCallback f, {bool enabled = true, bool danger = false}) => ListTile(
           dense: true,
           enabled: enabled,
-          leading: Icon(icon, size: 20, color: !enabled ? Jp.lineStrong : (danger ? Jp.danger : Jp.primary)),
+          leading: JpIcon(icon, size: 20, color: !enabled ? Jp.lineStrong : (danger ? Jp.danger : Jp.primary)),
           title: Text(text, style: TextStyle(fontSize: 14, color: !enabled ? Jp.muted : (danger ? Jp.danger : Jp.text))),
           onTap: () { Navigator.pop(context); f(); },
         );
@@ -136,16 +137,16 @@ class _RentalsScreenState extends State<RentalsScreen> {
             const SizedBox(height: 8),
             ListTile(title: Text(r.deviceName, style: TextStyle(fontWeight: FontWeight.w700, color: Jp.text)), subtitle: Text(r.productName ?? '')),
             if (off)
-              item(Icons.power_settings_new, 'Bật J2ME', () => powerOn(r))
+              item(JpIcons.power, 'Bật J2ME', () => powerOn(r))
             else ...[
-              item(Icons.restart_alt, 'Khởi động lại', () => dialog('restart', r), enabled: canPlay),
-              item(Icons.aspect_ratio, 'Đổi kích thước', () => dialog('screen-size', r), enabled: canPlay),
-              item(Icons.public, 'Proxy', () => dialog('proxy', r), enabled: canPlay),
+              item(JpIcons.restart2, 'Khởi động lại', () => dialog('restart', r), enabled: canPlay),
+              item(JpIcons.screen, 'Đổi kích thước', () => dialog('screen-size', r), enabled: canPlay),
+              item(JpIcons.globe, 'Proxy', () => dialog('proxy', r), enabled: canPlay),
             ],
-            item(Icons.schedule, 'Gia hạn', () => extend(r)),
-            item(r.autoRenew ? Icons.toggle_on : Icons.toggle_off, r.autoRenew ? 'Tắt gia hạn tự động' : 'Bật gia hạn tự động', () => toggleAutoRenew(r)),
-            item(Icons.edit_outlined, 'Đổi tên máy', () => dialog('name', r)),
-            if (!off) item(Icons.power_settings_new, 'Tắt J2ME', () => dialog('power-off', r), danger: true),
+            item(JpIcons.clock, 'Gia hạn', () => extend(r)),
+            item(r.autoRenew ? JpIcons.toggleOn : JpIcons.toggleOff, r.autoRenew ? 'Tắt gia hạn tự động' : 'Bật gia hạn tự động', () => toggleAutoRenew(r)),
+            item(JpIcons.edit, 'Đổi tên máy', () => dialog('name', r)),
+            if (!off) item(JpIcons.power, 'Tắt J2ME', () => dialog('power-off', r), danger: true),
             const SizedBox(height: 6),
           ]),
         ),
@@ -178,7 +179,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
           HeroHeader(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Container(width: 42, height: 42, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.person, color: Colors.white)),
+                Container(width: 42, height: 42, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const JpIcon(JpIcons.navUser, color: Colors.white)),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Xin chào', style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
@@ -193,7 +194,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
                   Text(money(user?.balance ?? 0), style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
                   Text('${rentals.where((r) => !r.expired).length} phiên đang thuê', style: const TextStyle(color: Jp.highlight, fontSize: 13, fontWeight: FontWeight.w600)),
                 ])),
-                PrimaryButton('Thuê phiên mới', openRent, icon: Icons.add, container: Colors.white, content: Jp.primary, height: 40, fontSize: 12),
+                PrimaryButton('Thuê phiên mới', openRent, icon: JpIcons.add, container: Colors.white, content: Jp.primary, height: 40, fontSize: 12),
                 const SizedBox(width: 8),
               ]),
             ]),
@@ -204,7 +205,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
               Expanded(child: SectionTitle('Phiên J2ME của bạn', count: rentals.length)),
               IconButton(
                 onPressed: () => load(),
-                icon: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Jp.primary)) : const Icon(Icons.refresh, color: Jp.primary),
+                icon: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Jp.primary)) : const JpIcon(JpIcons.refresh, color: Jp.primary),
               ),
             ]),
           ),
@@ -214,7 +215,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: PrimaryButton('Xem tất cả (${viewable.length})', viewable.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => SyncScreen(rentals: viewable))),
-                    icon: Icons.sync, height: 34, fontSize: 12),
+                    icon: JpIcons.syncIcon, height: 34, fontSize: 12),
               ),
             ),
           if (loading && rentals.isEmpty) const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: Jp.primary)))
@@ -239,7 +240,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
             child: Material(
               elevation: 8,
               borderRadius: BorderRadius.circular(8),
-              child: PrimaryButton('Xem tất cả (${viewable.length})', () => Navigator.push(context, MaterialPageRoute(builder: (_) => SyncScreen(rentals: viewable))), icon: Icons.sync, height: 44, fontSize: 13),
+              child: PrimaryButton('Xem tất cả (${viewable.length})', () => Navigator.push(context, MaterialPageRoute(builder: (_) => SyncScreen(rentals: viewable))), icon: JpIcons.syncIcon, height: 44, fontSize: 13),
             ),
           ),
       ]),
@@ -251,13 +252,13 @@ class _RentalsScreenState extends State<RentalsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 16),
         decoration: cardDeco(radius: 12),
         child: Column(children: [
-          Container(width: 48, height: 48, decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.sports_esports, color: Jp.primary)),
+          Container(width: 48, height: 48, decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(12)), child: const JpIcon(JpIcons.gamepad, color: Jp.primary)),
           const SizedBox(height: 10),
           Text('Chưa có máy J2ME nào', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Jp.text)),
           const SizedBox(height: 4),
           Text('Thuê một phiên để bắt đầu chơi game Java ngay trên điện thoại.', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Jp.muted)),
           const SizedBox(height: 14),
-          PrimaryButton('Thuê phiên mới', openRent, icon: Icons.add, height: 38, fontSize: 13),
+          PrimaryButton('Thuê phiên mới', openRent, icon: JpIcons.add, height: 38, fontSize: 13),
         ]),
       );
 
@@ -288,7 +289,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
             color: Jp.gameBg,
             child: Stack(fit: StackFit.expand, children: [
               if (shot != null) Image.memory(shot, fit: BoxFit.cover, gaplessPlayback: true, filterQuality: FilterQuality.none)
-              else Center(child: Icon(Icons.phone_android, size: 38, color: Jp.muted.withOpacity(0.6))),
+              else Center(child: JpIcon(JpIcons.screen, size: 38, color: Jp.muted.withOpacity(0.6))),
               Positioned(top: 6, left: 6, child: StatusPill(label, color, white: true)),
               if (r.screenWidth > 0)
                 Positioned(
@@ -321,7 +322,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
                 child: OutlinedButton(
                   onPressed: () => openMenu(r),
                   style: OutlinedButton.styleFrom(padding: EdgeInsets.zero, side: BorderSide(color: Jp.lineStrong), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                  child: const Icon(Icons.more_vert, size: 16, color: Jp.primary),
+                  child: const JpIcon(JpIcons.more, size: 16, color: Jp.primary),
                 ),
               ),
             ]),
@@ -414,9 +415,9 @@ class _RentSheetState extends State<RentSheet> {
             ),
           Row(children: [
             Expanded(child: Text('Số chu kỳ', style: TextStyle(color: Jp.muted, fontSize: 14))),
-            IconButton(onPressed: qty > 1 ? () { setState(() => qty--); refresh(); } : null, icon: const Icon(Icons.remove_circle_outline)),
+            IconButton(onPressed: qty > 1 ? () { setState(() => qty--); refresh(); } : null, icon: const JpIcon(JpIcons.remove)),
             Text('$qty', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Jp.text)),
-            IconButton(onPressed: qty < 12 ? () { setState(() => qty++); refresh(); } : null, icon: const Icon(Icons.add_circle_outline)),
+            IconButton(onPressed: qty < 12 ? () { setState(() => qty++); refresh(); } : null, icon: const JpIcon(JpIcons.add)),
           ]),
           Row(children: [
             Expanded(child: Text('Thành tiền', style: TextStyle(color: Jp.muted, fontSize: 14))),

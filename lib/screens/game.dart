@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../icons.dart';
 
 import '../api.dart';
 import '../game/connection.dart';
@@ -115,7 +116,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
               child: Row(children: [
-                IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.arrow_back, color: Jp.text)),
+                IconButton(onPressed: () => Navigator.pop(context), icon: JpIcon(JpIcons.back, color: Jp.text)),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(r.deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Jp.text)),
                   Row(children: [
@@ -124,8 +125,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     Flexible(child: Text(live ? 'Đang chạy' : conn.statusText, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Jp.muted))),
                   ]),
                 ])),
-                IconButton(onPressed: _typeText, icon: Icon(Icons.keyboard_alt_outlined, color: Jp.text)),
-                IconButton(onPressed: () => setState(() => showPad = !showPad), icon: Icon(Icons.gamepad_outlined, color: showPad ? Jp.primary : Jp.text)),
+                IconButton(onPressed: _typeText, icon: JpIcon(JpIcons.toolKeyboard, color: Jp.text)),
+                IconButton(onPressed: () => setState(() => showPad = !showPad), icon: JpIcon(JpIcons.gamepad, color: showPad ? Jp.primary : Jp.text)),
               ]),
             ),
           ),
@@ -199,7 +200,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 ],
                 child: Container(
                   decoration: BoxDecoration(border: Border.all(color: Jp.lineStrong), borderRadius: BorderRadius.circular(9)),
-                  child: const Icon(Icons.tune, color: Jp.primary, size: 18),
+                  child: const JpIcon(JpIcons.tune, color: Jp.primary, size: 18),
                 ),
               ),
             ),

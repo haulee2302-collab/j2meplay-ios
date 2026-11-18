@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
@@ -129,21 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     launchUrl(Uri.parse(uri), mode: LaunchMode.externalApplication);
   }
 
-  Widget _head(String eyebrow, String title, String desc) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(eyebrow, style: const TextStyle(color: Jp.primary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
-              Text(title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Jp.text)),
-              const SizedBox(height: 2),
-              Text(desc, style: TextStyle(fontSize: 12, color: Jp.muted)),
-            ]),
-          ),
-        ),
-      );
+  Widget _head(String eyebrow, String title, String desc) => PageHead(eyebrow, title, desc);
 
   Widget _section(String title, String sub, List<Widget> children) => Container(
         margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -165,7 +152,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]),
       );
 
-  Widget _menuItem(String key, IconData icon, String label) {
+  Widget _menuItem(String key, JpIconData icon, String label) {
     final danger = key == 'logout';
     return GestureDetector(
       onTap: () {
@@ -177,7 +164,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: danger ? const Color(0xFFFECACA) : Jp.line)),
         child: Row(children: [
-          Container(width: 32, height: 32, decoration: BoxDecoration(color: danger ? Jp.dangerBg : Jp.primarySoft, borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 17, color: danger ? Jp.danger : Jp.primary)),
+          Container(width: 32, height: 32, decoration: BoxDecoration(color: danger ? Jp.dangerBg : Jp.primarySoft, borderRadius: BorderRadius.circular(8)), child: JpIcon(icon, size: 17, color: danger ? Jp.danger : Jp.primary)),
           const SizedBox(width: 12),
           Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: danger ? Jp.danger : Jp.text))),
           if (!danger) Text('›', style: TextStyle(fontSize: 20, color: Jp.muted)),
@@ -212,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(children: [
-                const Icon(Icons.arrow_back, size: 18, color: Jp.primary),
+                const JpIcon(JpIcons.back, size: 18, color: Jp.primary),
                 const SizedBox(width: 4),
                 const Text('Tài khoản', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Jp.primary)),
               ]),
@@ -246,15 +233,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Column(children: [
-            _menuItem('info', Icons.person_outline, 'Thông tin tài khoản'),
+            _menuItem('info', JpIcons.navUser, 'Thông tin tài khoản'),
             const SizedBox(height: 8),
-            _menuItem('security', Icons.lock_outline, 'Bảo mật & truy cập'),
+            _menuItem('security', JpIcons.lock, 'Bảo mật & truy cập'),
             const SizedBox(height: 8),
-            _menuItem('tx', Icons.account_balance_wallet_outlined, 'Lịch sử giao dịch'),
+            _menuItem('tx', JpIcons.wallet, 'Lịch sử giao dịch'),
             const SizedBox(height: 8),
-            _menuItem('contact', Icons.support_agent, 'Liên hệ hỗ trợ'),
+            _menuItem('contact', JpIcons.navContact, 'Liên hệ hỗ trợ'),
             const SizedBox(height: 8),
-            _menuItem('logout', Icons.logout, 'Đăng xuất'),
+            _menuItem('logout', JpIcons.logout, 'Đăng xuất'),
           ]),
         ),
       ],
@@ -332,12 +319,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final zaloPhone = s('zalo_phone');
     final zaloUrl = s('zalo_url').isNotEmpty ? s('zalo_url') : (zaloPhone.isNotEmpty ? 'https://zalo.me/${zaloPhone.replaceAll(RegExp(r'\D'), '')}' : '');
     final hotline = s('hotline');
-    final rows = <(String, String, IconData, String, Color?)>[
-      (s('facebook_label').isEmpty ? 'Facebook J2ME Play' : s('facebook_label'), 'Nhắn tin fanpage', Icons.facebook, s('facebook_url'), const Color(0xFF1877F2)),
-      (s('zalo_label').isEmpty ? 'Zalo hỗ trợ' : s('zalo_label'), zaloPhone.isEmpty ? 'Chat Zalo với hỗ trợ viên' : zaloPhone, Icons.chat_bubble, zaloUrl, const Color(0xFF0068FF)),
-      ('Nhóm Zalo cộng đồng', 'Tham gia box Zalo J2ME Play', Icons.groups, s('box_zalo_url'), const Color(0xFF0068FF)),
-      ('Hotline', hotline.isEmpty ? 'Chưa cập nhật' : hotline, Icons.phone, hotline.isEmpty ? '' : 'tel:${hotline.replaceAll(RegExp(r'[^0-9+]'), '')}', null),
-      ('Trang chủ', Api.instance.base.replaceFirst(RegExp(r'^https?://'), ''), Icons.home_outlined, Api.instance.base, null),
+    final rows = <(String, String, JpIconData, String, Color?)>[
+      (s('facebook_label').isEmpty ? 'Facebook J2ME Play' : s('facebook_label'), 'Nhắn tin fanpage', JpIcons.globe, s('facebook_url'), const Color(0xFF1877F2)),
+      (s('zalo_label').isEmpty ? 'Zalo hỗ trợ' : s('zalo_label'), zaloPhone.isEmpty ? 'Chat Zalo với hỗ trợ viên' : zaloPhone, JpIcons.navContact, zaloUrl, const Color(0xFF0068FF)),
+      ('Nhóm Zalo cộng đồng', 'Tham gia box Zalo J2ME Play', JpIcons.navUser, s('box_zalo_url'), const Color(0xFF0068FF)),
+      ('Hotline', hotline.isEmpty ? 'Chưa cập nhật' : hotline, JpIcons.navPhone, hotline.isEmpty ? '' : 'tel:${hotline.replaceAll(RegExp(r'[^0-9+]'), '')}', null),
+      ('Trang chủ', Api.instance.base.replaceFirst(RegExp(r'^https?://'), ''), JpIcons.navHome, Api.instance.base, null),
     ];
     return [
       for (final r in rows)
@@ -350,7 +337,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Jp.line)),
               child: Row(children: [
-                Container(width: 40, height: 40, decoration: BoxDecoration(color: r.$5 ?? Jp.primarySoft, borderRadius: BorderRadius.circular(10)), child: Icon(r.$3, size: 22, color: r.$5 != null ? Colors.white : Jp.primary)),
+                Container(width: 40, height: 40, decoration: BoxDecoration(color: r.$5 ?? Jp.primarySoft, borderRadius: BorderRadius.circular(10)), child: JpIcon(r.$3, size: 22, color: r.$5 != null ? Colors.white : Jp.primary)),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(r.$1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Jp.text)),
