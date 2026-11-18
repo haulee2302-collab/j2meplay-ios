@@ -30,15 +30,15 @@ class AuthScaffold extends StatelessWidget {
             child: ClipRect(
               child: Stack(children: [
                 Positioned(left: -60, top: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
-                SafeArea(
+                Positioned.fill(child: SafeArea(
                   bottom: false,
-                  child: Column(children: [
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
                     const SizedBox(height: 10),
                     Image.asset('assets/jp_logo.png', width: 140, fit: BoxFit.fitWidth),
                     const SizedBox(height: 2),
                     Text('Chơi game Java mọi lúc, mọi nơi', style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13)),
                   ]),
-                ),
+                )),
               ]),
             ),
           ),
