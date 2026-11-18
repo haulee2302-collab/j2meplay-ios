@@ -26,13 +26,13 @@ class AuthScaffold extends StatelessWidget {
         child: Column(children: [
           Container(
             width: double.infinity,
-            height: 190 + MediaQuery.of(context).padding.top * 0,
+            height: 190 + topInset(context),
             decoration: BoxDecoration(gradient: Jp.heroBrush),
             child: ClipRect(
               child: Stack(children: [
                 Positioned(left: -60, top: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
-                Positioned.fill(child: SafeArea(
-                  bottom: false,
+                Positioned.fill(child: Padding(
+                  padding: EdgeInsets.only(top: topInset(context)),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
                     const SizedBox(height: 10),
                     Image.asset('assets/jp_logo.png', width: 140, fit: BoxFit.fitWidth),
