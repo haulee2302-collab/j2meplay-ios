@@ -14,7 +14,7 @@ import 'store.dart';
 class LocalGameScreen extends StatefulWidget {
   final LocalInstance inst;
   final VoidCallback? onConfig;
-  const LocalGameScreen({super.key, required this.inst, required this.onConfig});
+  const LocalGameScreen({super.key, required this.inst, this.onConfig});
   @override
   State<LocalGameScreen> createState() => _LocalGameScreenState();
 }
