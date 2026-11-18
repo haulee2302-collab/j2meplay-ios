@@ -1,0 +1,36 @@
+name: Test VM Java
+
+on:
+  push:
+    paths: ['lib/jvm/**', 'vmtest/**', '.github/workflows/vmtest.yml']
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: Biên dịch chương trình thử và chạy bằng Java thật
+        run: |
+          mkdir -p classes
+          javac -encoding UTF-8 --release 8 -nowarn -d classes vmtest/java/T.java
+          java -cp classes T > expected.txt
+      - name: Chạy bằng VM của app
+        working-directory: vmtest
+        run: |
+          dart pub get
+          dart run bin/conf.dart ../classes T ../actual.txt
+      - name: So sánh
+        if: always()
+        run: |
+          diff expected.txt actual.txt > diff.txt || true
+          echo "=== DIFF ==="; cat diff.txt | head -150
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vmtest-result
+          path: |
+            expected.txt
+            actual.txt
+            diff.txt
