@@ -25,6 +25,9 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Icon + tên app
+        run: ./tool/make_icons.sh
+
       - name: Cấu hình Google Sign-In (nếu có GOOGLE_IOS_CLIENT_ID)
         env:
           GID: ${{ vars.GOOGLE_IOS_CLIENT_ID }}
