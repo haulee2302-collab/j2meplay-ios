@@ -77,7 +77,7 @@ class JpIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = color ?? IconTheme.of(context).color ?? Colors.black;
-    return SizedBox(width: size, height: size, child: CustomPaint(painter: _IconPainter(data, c)));
+    return UnconstrainedBox(child: SizedBox(width: size, height: size, child: CustomPaint(painter: _IconPainter(data, c))));
   }
 }
 

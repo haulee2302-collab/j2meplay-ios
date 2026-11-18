@@ -44,7 +44,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
   late final List<_Tile> tiles;
   final Set<String> selected = {};
   String mainId = '', activeId = '';
-  bool selectedOnly = false, controlSmall = false, showInfo = false, sidebar = false, mainKeypad = false;
+  bool groupPad = false, selectedOnly = false, controlSmall = false, showInfo = false, sidebar = false, mainKeypad = false;
   int smallSize = 210;
   Offset floatDelta = Offset.zero;
   SharedPreferences? _p;
@@ -433,6 +433,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
                   Text('Xem tất cả', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _navy)),
                   Text('${tiles.length} thiết bị · đã chọn ${selected.length}', maxLines: 1, style: TextStyle(fontSize: 11, color: _mutedC)),
                 ])),
+                if (controlSmall) IconButton(onPressed: () => setState(() => groupPad = !groupPad), icon: JpIcon(JpIcons.toolKeyboard, color: groupPad ? Jp.primary : _navy)),
                 IconButton(onPressed: () => setState(() => sidebar = !sidebar), icon: JpIcon(JpIcons.tune, color: _navy)),
               ]),
             ),
@@ -440,13 +441,17 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(5),
-                child: Wrap(spacing: 4, runSpacing: 4, children: [
+                child: Wrap(spacing: 4, runSpacing: 4, alignment: WrapAlignment.start, crossAxisAlignment: WrapCrossAlignment.start, children: [
                   if (tiles.isEmpty) Padding(padding: const EdgeInsets.all(12), child: Text('Chưa có phiên J2ME đang hoạt động để xem.', style: TextStyle(fontSize: 12, color: _mutedC))),
                   for (final t in tiles)
                     if (t.id != mainId && (!selectedOnly || selected.contains(t.id))) _small(t, smallW),
                 ]),
               ),
             ),
+            if (groupPad && mainId.isEmpty && controlSmall) ...[
+              Divider(height: 1, color: Jp.line),
+              Container(color: _panelBg, child: Keypad(_mainTarget)),
+            ],
             SizedBox(height: MediaQuery.of(context).padding.bottom),
           ]),
           if (mainTile.isNotEmpty)
@@ -454,7 +459,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
               child: SafeArea(
                 child: Align(
                   alignment: Alignment.center,
-                  child: Transform.translate(offset: floatDelta, child: _mainCard(mainTile.first, screenW - 10)),
+                  child: Transform.translate(offset: floatDelta, child: FittedBox(fit: BoxFit.scaleDown, child: _mainCard(mainTile.first, screenW - 10))),
                 ),
               ),
             ),

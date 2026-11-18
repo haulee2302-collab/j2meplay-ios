@@ -332,7 +332,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           ]),
         ),
         // Bàn phím ảo; ẩn khi game đang mở form
-        if (showPad && rt == null) ...[
+        if (showPad) ...[
           Divider(height: 1, color: _panelLine),
           Container(color: _panelBg, child: Keypad(conn)),
         ],

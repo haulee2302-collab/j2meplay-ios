@@ -354,15 +354,15 @@ class PageHead extends StatelessWidget {
         child: Stack(children: [
           Positioned(top: -50, right: -70, child: Container(width: 200, height: 200, decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), shape: BoxShape.circle))),
           Padding(
-              padding: EdgeInsets.fromLTRB(20, topInset(context) + 8, 20, 18),
-              child: Row(children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              padding: EdgeInsets.fromLTRB(20, topInset(context) + 8, 20, 20),
+              child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 131), child: Row(children: [
+                Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Padding(padding: const EdgeInsets.only(right: 40), child: Text(eyebrow, style: const TextStyle(color: Jp.highlight, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1))),
                   Padding(padding: const EdgeInsets.only(top: 2, right: 40), child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900))),
                   Padding(padding: const EdgeInsets.only(top: 4), child: Text(desc, style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 12, height: 1.4))),
                 ])),
                 if (action != null) action!,
-              ]),
+              ])),
           ),
           Positioned(top: topInset(context) - 4, right: 4, child: const ThemeToggle()),
         ]),
