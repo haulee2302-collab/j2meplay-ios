@@ -160,7 +160,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: Jp.surface,
-      builder: (_) => _JarSheet(conn: conn, onSelected: () { Navigator.pop(context); conn.reload(); }),
+      builder: (_) => JarSheet(conn: conn, onSelected: () { Navigator.pop(context); conn.reload(); }),
     );
   }
 
@@ -364,15 +364,15 @@ List<_JarItem> _items(dynamic arr, String? source) {
   ];
 }
 
-class _JarSheet extends StatefulWidget {
+class JarSheet extends StatefulWidget {
   final GameConnection conn;
   final VoidCallback onSelected;
-  const _JarSheet({required this.conn, required this.onSelected});
+  const JarSheet({required this.conn, required this.onSelected});
   @override
-  State<_JarSheet> createState() => _JarSheetState();
+  State<JarSheet> createState() => _JarSheetState();
 }
 
-class _JarSheetState extends State<_JarSheet> {
+class _JarSheetState extends State<JarSheet> {
   int tab = 0;
   List<_JarItem> system = [], mine = [];
   bool loading = true;
