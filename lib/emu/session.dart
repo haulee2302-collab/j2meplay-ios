@@ -12,6 +12,7 @@ import '../jvm/midp.dart';
 import '../jvm/vm.dart';
 import 'glyphs.dart';
 import 'net.dart';
+import 'keepalive.dart';
 import 'store.dart';
 
 /// Phím ảo gửi vào game local (nối với Canvas MIDP ở giai đoạn sau).
@@ -118,7 +119,7 @@ class EmuSession extends ChangeNotifier {
 
   void _publish() {
     final m = midp;
-    if (m == null || _busy) return;
+    if (m == null || _busy || !KeepAlive.active) return;
     _busy = true;
     final w = m.width, h = m.height, px = m.screen.px;
     final out = Uint8List(w * h * 4);
@@ -136,6 +137,8 @@ class EmuSession extends ChangeNotifier {
       old?.dispose();
     });
   }
+
+  void resume() => _publish();
 
   void pointer(String phase, int x, int y) => midp?.pointer(phase, x, y);
   void typeChar(String ch) => midp?.typeChar(ch);

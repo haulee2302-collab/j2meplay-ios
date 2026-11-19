@@ -56,7 +56,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Thoát game?'),
-        content: const Text('Chạy ẩn: game vẫn chạy nền trong app. Thoát: tắt hẳn giả lập này.'),
+        content: const Text('Chạy ẩn: game vẫn chạy nền, bạn có thể mở app khác. Thoát: tắt hẳn giả lập này.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('Hủy')),
           TextButton(onPressed: () => Navigator.pop(c, 'hide'), child: const Text('Chạy ẩn')),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'theme.dart';
+import 'emu/keepalive.dart';
 import 'screens/login.dart';
 import 'screens/shell.dart';
 import 'screens/floating.dart';
@@ -9,6 +10,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Api.instance.load();
   await Jp.load();
+  KeepAlive.init();
   runApp(const J2mePlayApp());
 }
 
