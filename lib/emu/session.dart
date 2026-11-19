@@ -7,9 +7,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 
 import '../game/connection.dart';
+import '../game/jpc.dart';
 import '../jvm/jar.dart';
 import '../jvm/midp.dart';
 import '../jvm/vm.dart';
+import 'core.dart';
 import 'glyphs.dart';
 import 'net.dart';
 import 'keepalive.dart';
@@ -40,7 +42,18 @@ class EmuSession extends ChangeNotifier {
   bool error = false, ready = false, foreground = true, _busy = false;
   final List<String> log = [];
   final ValueNotifier<ui.Image?> frame = ValueNotifier(null);
-  late final EmuKeys keys = EmuKeys((k, ph) => midp?.key(k, ph));
+  // Lõi C (thử nghiệm): khung hình JPC1 do native/jvmcore phát, vẽ bằng JpcRenderer của phiên thuê.
+  JvmCore? _core;
+  JpcRenderer? _rend;
+  bool _coreMode = false, _pumping = false, _dirtyC = false, _coreEnded = false;
+  bool get coreMode => _coreMode;
+  late final EmuKeys keys = EmuKeys((k, ph) {
+    if (_coreMode) {
+      _coreKey(k, ph);
+    } else {
+      midp?.key(k, ph);
+    }
+  });
   EmuSession(this.inst);
 
   void _set(String s, {bool err = false}) {
@@ -67,6 +80,7 @@ class EmuSession extends ChangeNotifier {
         return;
       }
       final Uint8List bytes = await (await EmuStore.jarFile(jar.first.id)).readAsBytes();
+      if (JvmCore.enabled && await _startCore(jar.first.id, bytes)) return;
       await Glyphs.build();
       final v = createVm(onLog: _log);
       v.props['microedition.platform'] = 'J2ME Play';
@@ -118,6 +132,113 @@ class EmuSession extends ChangeNotifier {
     }
   }
 
+  // ---------------- lõi C ----------------
+  Future<bool> _startCore(String jarId, Uint8List bytes) async {
+    final core = JvmCore.get();
+    if (core == null) {
+      _log('Lõi C không có trong bản này, dùng bộ thông dịch Dart');
+      return false;
+    }
+    try {
+      _set('Đang giải nén JAR…');
+      final base = (await EmuStore.instanceDir(inst.id)).path;
+      final prep = await prepareJar(bytes, '$base/core_$jarId', '${bytes.length}');
+      if (prep == null) {
+        _log('Lõi C: không đọc được MIDlet-1, dùng bộ thông dịch Dart');
+        return false;
+      }
+      final rms = '$base/rms_core_$jarId';
+      final rc = core.start(prep.dir, prep.midlet, rms, inst.width, inst.height);
+      if (rc != 0) {
+        _log('Lõi C đang bận với giả lập khác, dùng bộ thông dịch Dart');
+        return false;
+      }
+      _core = core;
+      _rend = JpcRenderer();
+      _coreMode = true;
+      _coreEnded = false;
+      final ms = inst.fps <= 0 ? 16 : (1000 ~/ inst.fps).clamp(8, 100);
+      _timer = Timer.periodic(Duration(milliseconds: ms), (_) => _pumpCore());
+      ready = true;
+      _set('Đang chạy (lõi C)');
+      return true;
+    } catch (e) {
+      _log('Lõi C lỗi: $e');
+      _coreMode = false;
+      return false;
+    }
+  }
+
+  Future<void> _pumpCore() async {
+    final core = _core, r = _rend;
+    if (core == null || r == null || _pumping) return;
+    _pumping = true;
+    try {
+      final show = BgKeep.active || Pip.wants(inst.id);
+      var any = false;
+      for (var i = 0; i < 48; i++) {
+        final d = core.poll();
+        if (d == null) break;
+        if (!show) continue; // nền: bỏ khung; khi quay lại sẽ yêu cầu vẽ lại toàn bộ
+        try {
+          await r.renderFrame(d, false);
+          any = true;
+        } catch (e) {
+          _log('JPC lỗi: $e');
+          core.refresh();
+        }
+      }
+      if (any) _presentCore();
+      final st = core.status;
+      if (st == -1 && !_coreEnded) {
+        _coreEnded = true;
+        _set('Lõi C dừng: ${core.error}', err: true);
+      } else if (st == 2 && !_coreEnded) {
+        _coreEnded = true;
+        _set('Game đã thoát');
+      }
+    } finally {
+      _pumping = false;
+    }
+  }
+
+  Future<void> _presentCore() async {
+    final r = _rend;
+    if (r == null) return;
+    if (_busy) {
+      _dirtyC = true;
+      return;
+    }
+    _busy = true;
+    try {
+      final fb = r.fb;
+      if (fb != null && Pip.wants(inst.id)) Pip.send(Uint8List.fromList(fb.buffer.asUint8List()), r.width, r.height);
+      if (!BgKeep.active) return;
+      final img = await r.snapshot();
+      if (img == null) return;
+      final old = frame.value;
+      frame.value = img;
+      if (old != null) Future.delayed(const Duration(milliseconds: 250), old.dispose);
+    } finally {
+      _busy = false;
+      if (_dirtyC && _coreMode) {
+        _dirtyC = false;
+        _presentCore();
+      }
+    }
+  }
+
+  void _coreKey(String k, String phase) {
+    final code = Midp.keyCodeOf(k);
+    if (code == 0) return;
+    if (phase == 'press') {
+      _core?.key(0, code);
+      _core?.key(1, code);
+    } else {
+      _core?.key(phase == 'down' ? 0 : 1, code);
+    }
+  }
+
   void _publish() {
     final m = midp;
     if (m == null || _busy) return;
@@ -143,10 +264,32 @@ class EmuSession extends ChangeNotifier {
     });
   }
 
-  void resume() => _publish();
+  void resume() {
+    if (_coreMode) {
+      _core?.refresh();
+      return;
+    }
+    _publish();
+  }
 
-  void pointer(String phase, int x, int y) => midp?.pointer(phase, x, y);
-  void typeChar(String ch) => midp?.typeChar(ch);
+  void pointer(String phase, int x, int y) {
+    if (_coreMode) {
+      _core?.pointer(phase == 'down' ? 0 : (phase == 'up' ? 1 : 2), x, y);
+      return;
+    }
+    midp?.pointer(phase, x, y);
+  }
+
+  void typeChar(String ch) {
+    if (_coreMode) {
+      if (ch.isEmpty) return;
+      final c = ch.codeUnitAt(0);
+      _core?.key(0, c);
+      _core?.key(1, c);
+      return;
+    }
+    midp?.typeChar(ch);
+  }
 
   Future<void> saveShot() async {
     final img = frame.value;
@@ -159,6 +302,13 @@ class EmuSession extends ChangeNotifier {
 
   void stop() {
     _timer?.cancel();
+    if (_coreMode) {
+      _coreMode = false;
+      _core?.stop();
+      _core = null;
+      _rend?.close();
+      _rend = null;
+    }
     midp?.destroy();
     vm?.stop();
     vm = null;

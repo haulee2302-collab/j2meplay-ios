@@ -1,6 +1,8 @@
 // MIDP 2.0 (javax.microedition.*) viết bằng C: MIDlet, Display, Canvas, GameCanvas, Graphics, Image, Font, Command, RecordStore.
 // Màn hình được phát ra theo giao thức JPC1 (cùng định dạng phiên thuê) để JpcRenderer phía Dart vẽ lại; ảnh phụ (Image) vẽ bằng C.
 #include "jvm.h"
+#include <pthread.h>
+#include <sys/stat.h>
 
 #define NS(cls, name, desc, fn) regNative(cls, name, desc, 1, fn)
 #define NI(cls, name, desc, fn) regNative(cls, name, desc, 0, fn)
@@ -310,7 +312,8 @@ static int isCanvas(Obj *o) { return o && subOf(o->cls, cvCls()); }
 typedef struct { int kind, a, b; Obj *o; } Ev;
 enum { EK_KEYD, EK_KEYU, EK_KEYR, EK_PD, EK_PU, EK_PM, EK_SERIAL, EK_CMD, EK_SHOW };
 static Ev evq[512]; static int evh, evt;
-static void evPush(int kind, int a, int b, Obj *o) { int n = (evt + 1) % 512; if (n == evh) return; evq[evt] = (Ev){kind, a, b, o}; evt = n; }
+static pthread_mutex_t evmu = PTHREAD_MUTEX_INITIALIZER;
+static void evPush(int kind, int a, int b, Obj *o) { pthread_mutex_lock(&evmu); int n = (evt + 1) % 512; if (n != evh) { evq[evt] = (Ev){kind, a, b, o}; evt = n; } pthread_mutex_unlock(&evmu); }
 static void *evT; static int evBusy, evPaint;
 
 static int gameBit(int code) {
@@ -318,7 +321,8 @@ static int gameBit(int code) {
   return 0;
 }
 // Host đẩy phím / chạm vào hàng đợi
-void midpKey(int type, int code) { if (type == 0) { g_keyBits |= gameBit(code); evPush(EK_KEYD, code, 0, 0); } else if (type == 1) { g_keyBits &= ~gameBit(code); evPush(EK_KEYU, code, 0, 0); } else evPush(EK_KEYR, code, 0, 0); }
+static int heldK[16];
+void midpKey(int type, int code) { if (type == 0) { int rep = 0, fr = -1; for (int i = 0; i < 16; i++) { if (heldK[i] == code) rep = 1; if (!heldK[i] && fr < 0) fr = i; } if (!rep && fr >= 0) heldK[fr] = code; g_keyBits |= gameBit(code); evPush(rep ? EK_KEYR : EK_KEYD, code, 0, 0); } else if (type == 1) { for (int i = 0; i < 16; i++) if (heldK[i] == code) heldK[i] = 0; g_keyBits &= ~gameBit(code); evPush(EK_KEYU, code, 0, 0); } else evPush(EK_KEYR, code, 0, 0); }
 void midpPointer(int type, int x, int y) { evPush(type == 0 ? EK_PD : type == 1 ? EK_PU : EK_PM, x, y, 0); }
 
 static void fn_dispGet(Slot *a) { (void)a; if (!g_display) g_display = newObj(dispCls ? dispCls : (dispCls = loadClass(LCD "Display"))); a[0].a = g_display; }
@@ -382,7 +386,7 @@ static void midpIdle(void) {
   if (!evT) evT = evThreadNew();
   if (evBusy && !evThreadBusy(evT)) { evBusy = 0; if (evPaint) { evPaint = 0; frameEnd(); lastPaint = nowMs(); } }
   if (evBusy) return;
-  while (evh != evt) { Ev e = evq[evh]; evh = (evh + 1) % 512; if (startEvent(&e)) return; }
+  for (;;) { pthread_mutex_lock(&evmu); if (evh == evt) { pthread_mutex_unlock(&evmu); break; } Ev e = evq[evh]; evh = (evh + 1) % 512; pthread_mutex_unlock(&evmu); if (startEvent(&e)) return; }
   if (g_repaint && isCanvas(g_cur) && g_cur != gcCanvas && nowMs() - lastPaint >= 16) {
     Method *m = findMethod(g_cur->cls, "paint", "(Ljavax/microedition/lcdui/Graphics;)V");
     if (m && !m->native) {
@@ -528,10 +532,17 @@ void installMidp(void) {
   NI(RS_, "enumerateRecords", "(Ljavax/microedition/rms/RecordFilter;Ljavax/microedition/rms/RecordComparator;Z)Ljavax/microedition/rms/RecordEnumeration;", rs_enum);
   NI(RE, "hasNextElement", "()Z", re_has); NI(RE, "nextRecordId", "()I", re_nextId); NI(RE, "nextRecord", "()[B", re_next); NI(RE, "numRecords", "()I", re_num); NI(RE, "reset", "()V", re_reset); NI(RE, "destroy", "()V", re_nop);
   (void)re_next; (void)fn_zero; (void)fn_false;
-  g_idle = midpIdle; { const char *e = getenv("RMS_DIR"); g_rmsDir = e ? e : "/tmp/jvmcore_rms"; char c[300]; snprintf(c, sizeof c, "mkdir -p %s", g_rmsDir); if (system(c)) {} }
+  g_idle = midpIdle;
   g_screenG = newGraphics(0, g_sw, g_sh, 0);
 }
 
 // ---------------- API cho host ----------------
 void midpSetScreen(int w, int h) { if (w != g_sw || h != g_sh) { g_sw = w; g_sh = h; needKey = 1; if (g_screenG) gReset(g_screenG, w, h); } g_repaint = 1; }
 void midpRequestRepaint(void) { g_repaint = 1; }
+
+void midpForceKey(void) { needKey = 1; g_repaint = 1; frameOpen = 0; }
+void midpReset(void) {
+  fontCls = imgCls = gfxCls = cmdCls = dispCls = canvasCls = rsCls = 0; defFont = 0; g_resId = 1; g_gcG = 0; g_cur = g_display = g_screenG = g_midlet = 0; gcCanvas = 0;
+  g_repaint = 0; g_inPaint = 0; g_keyBits = 0; lastPaint = 0; evh = evt = 0; evT = 0; evBusy = evPaint = 0; rsList = 0; warnedText = 0; frameOpen = 0; needKey = 1; epoch = 1; g_frames = 0; g_destroyed = 0;
+  memset(heldK, 0, sizeof heldK);
+}

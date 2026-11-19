@@ -6,6 +6,7 @@ import '../screens/floating.dart';
 import '../screens/game.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'core.dart';
 import 'kbd.dart';
 import 'screens_ui.dart';
 import 'pip.dart';
@@ -51,6 +52,17 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
   }
 
   void _restart() => _rebind(_inst);
+
+  Future<void> _toggleCore() async {
+    if (JvmCore.get() == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bản này chưa có lõi C, vẫn dùng bộ thông dịch Dart')));
+      return;
+    }
+    await JvmCore.setEnabled(!JvmCore.enabled);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(JvmCore.enabled ? 'Đã bật lõi C (thử nghiệm), đang khởi động lại' : 'Đã tắt lõi C, đang khởi động lại')));
+    _restart();
+  }
 
   Future<void> _exit() async {
     final v = await showDialog<String>(
@@ -228,6 +240,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
                       _toolItem(Pip.enabled ? 'Tắt hình trong hình' : 'Bật hình trong hình', JpIcons.screen, _togglePip),
                       _toolItem('Khởi động lại', JpIcons.restart2, _restart),
+                      _toolItem(JvmCore.enabled ? 'Tắt lõi C (thử nghiệm)' : 'Bật lõi C (thử nghiệm)', JpIcons.tune, _toggleCore),
                       _toolItem('Cấu hình', JpIcons.tune, _config),
                       _toolItem('Tắt giả lập', JpIcons.power, () { EmuRuntime.close(inst.id); LocalFloats.close(inst.id); Navigator.pop(context); }, danger: true),
                     ]),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'api.dart';
 import 'theme.dart';
+import 'emu/core.dart';
 import 'emu/keepalive.dart';
 import 'emu/pip.dart';
 import 'screens/login.dart';
@@ -13,6 +14,7 @@ Future<void> main() async {
   await Jp.load();
   BgKeep.init();
   Pip.load();
+  JvmCore.load();
   runApp(const J2mePlayApp());
 }
 

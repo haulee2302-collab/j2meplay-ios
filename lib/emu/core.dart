@@ -1,0 +1,159 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:ffi';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
+import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Cầu nối tới lõi JVM viết bằng C (native/jvmcore). Chỉ có trong bản iOS có biên dịch lõi C.
+/// Không có lõi (hoặc lỗi nạp) thì [JvmCore.get] trả về null và app dùng bộ thông dịch Dart như cũ.
+class JvmCore {
+  static JvmCore? _i;
+  static bool _tried = false;
+  static const prefKey = 'emu_core';
+  static bool enabled = false;
+
+  static Future<void> load() async {
+    try {
+      enabled = (await SharedPreferences.getInstance()).getBool(prefKey) ?? false;
+    } catch (_) {}
+  }
+
+  static Future<void> setEnabled(bool v) async {
+    enabled = v;
+    try {
+      await (await SharedPreferences.getInstance()).setBool(prefKey, v);
+    } catch (_) {}
+  }
+
+  static JvmCore? get() {
+    if (_tried) return _i;
+    _tried = true;
+    if (!Platform.isIOS) return null;
+    try {
+      DynamicLibrary lib;
+      try {
+        lib = DynamicLibrary.process();
+        lib.lookup('jvmcore_status');
+      } catch (_) {
+        lib = DynamicLibrary.open('jvmcore.framework/jvmcore');
+      }
+      _i = JvmCore._(lib);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[core] không nạp được lõi C: $e');
+      _i = null;
+    }
+    return _i;
+  }
+
+  final int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int, int) _start;
+  final int Function(Pointer<Uint8>, int) _poll;
+  final void Function(int, int) _key;
+  final void Function(int, int, int) _ptr;
+  final int Function() _status;
+  final Pointer<Utf8> Function() _error;
+  final void Function() _stop, _refresh;
+  Pointer<Uint8> _buf = malloc<Uint8>(1 << 20);
+  int _cap = 1 << 20;
+
+  JvmCore._(DynamicLibrary l)
+      : _start = l.lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int, int)>('jvmcore_start'),
+        _poll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_poll'),
+        _key = l.lookupFunction<Void Function(Int32, Int32), void Function(int, int)>('jvmcore_key'),
+        _ptr = l.lookupFunction<Void Function(Int32, Int32, Int32), void Function(int, int, int)>('jvmcore_pointer'),
+        _status = l.lookupFunction<Int32 Function(), int Function()>('jvmcore_status'),
+        _error = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_error'),
+        _stop = l.lookupFunction<Void Function(), void Function()>('jvmcore_stop'),
+        _refresh = l.lookupFunction<Void Function(), void Function()>('jvmcore_refresh');
+
+  /// 0 chưa chạy · 1 đang chạy · 2 đã thoát · -1 lỗi
+  int get status => _status();
+  String get error => _error().toDartString();
+  bool get busy => _status() == 1;
+
+  /// 0 = chạy; -1 = lõi đang bận với một giả lập khác.
+  int start(String dir, String midlet, String rms, int w, int h) {
+    final d = dir.toNativeUtf8(), m = midlet.toNativeUtf8(), r = rms.toNativeUtf8();
+    try {
+      return _start(d, m, r, w, h);
+    } finally {
+      malloc.free(d);
+      malloc.free(m);
+      malloc.free(r);
+    }
+  }
+
+  /// Lấy khung kế tiếp (null nếu chưa có). Dữ liệu chỉ hợp lệ tới lần gọi poll sau: dùng xong (kể cả await) rồi mới gọi lại.
+  Uint8List? poll() {
+    var n = _poll(_buf, _cap);
+    if (n == 0) return null;
+    if (n < 0) {
+      malloc.free(_buf);
+      _cap = -n + 1024;
+      _buf = malloc<Uint8>(_cap);
+      n = _poll(_buf, _cap);
+      if (n <= 0) return null;
+    }
+    return _buf.asTypedList(n);
+  }
+
+  void key(int type, int code) => _key(type, code);
+  void pointer(int type, int x, int y) => _ptr(type, x, y);
+  void stop() => _stop();
+  void refresh() => _refresh();
+}
+
+/// Giải nén JAR ra thư mục (một lần cho mỗi JAR) để lõi C nạp lớp và tài nguyên trực tiếp từ tệp.
+Future<({String dir, String midlet})?> prepareJar(Uint8List bytes, String root, String stamp) async {
+  final dir = Directory(root);
+  final mark = File('$root/.ok');
+  if (!(await mark.exists()) || (await mark.readAsString()) != stamp) {
+    if (await dir.exists()) await dir.delete(recursive: true);
+    await dir.create(recursive: true);
+    await compute(_extract, [bytes, root]);
+    await mark.writeAsString(stamp);
+  }
+  final mf = File('$root/META-INF/MANIFEST.MF');
+  if (!await mf.exists()) return null;
+  final cls = midletOf(await mf.readAsString());
+  if (cls == null) return null;
+  return (dir: root, midlet: cls);
+}
+
+void _extract(List<dynamic> a) {
+  final bytes = a[0] as Uint8List;
+  final root = a[1] as String;
+  final ar = ZipDecoder().decodeBytes(bytes);
+  for (final f in ar) {
+    final name = f.name;
+    if (name.contains('..')) continue;
+    if (f.isFile) {
+      final o = File('$root/$name');
+      o.parent.createSync(recursive: true);
+      o.writeAsBytesSync(f.content as List<int>);
+    }
+  }
+}
+
+/// Lớp MIDlet đầu tiên trong MANIFEST (MIDlet-1: Tên, biểu tượng, lớp), dạng 'a/b/C'.
+String? midletOf(String manifest) {
+  final lines = <String>[];
+  for (final raw in const LineSplitter().convert(manifest)) {
+    if (raw.startsWith(' ') && lines.isNotEmpty) {
+      lines[lines.length - 1] += raw.substring(1);
+    } else {
+      lines.add(raw);
+    }
+  }
+  for (final l in lines) {
+    if (l.toLowerCase().startsWith('midlet-1:')) {
+      final parts = l.substring(9).split(',');
+      if (parts.length >= 3) return parts[2].trim().replaceAll('.', '/');
+    }
+  }
+  return null;
+}

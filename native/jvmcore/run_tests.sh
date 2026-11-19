@@ -3,7 +3,7 @@
 set -e
 cd "$(dirname "$0")"
 CC=${CC:-$(command -v clang || command -v gcc)}
-$CC -O2 -w -o jvm jvm.c natives.c io.c midp.c png.c misc.c -lm
+$CC -O2 -w -o jvm jvm.c natives.c io.c midp.c png.c misc.c -lm -lpthread
 cd test
 for t in T1 T2; do
   javac --release 8 -d . $t.java 2>/dev/null

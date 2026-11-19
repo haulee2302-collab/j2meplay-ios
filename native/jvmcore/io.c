@@ -18,6 +18,7 @@ static uint8_t *defaultRes(const char *name, int *len) {
 uint8_t *loadResource(const char *name, int *len) { return (g_resLoader ? g_resLoader : defaultRes)(name[0] == '/' ? name + 1 : name, len); }
 
 static Class *baisCls, *baosCls, *istCls;
+void ioReset(void) { baisCls = baosCls = istCls = 0; }
 static Class *cBAIS(void) { return baisCls ? baisCls : (baisCls = loadClass("java/io/ByteArrayInputStream")); }
 static Class *cBAOS(void) { return baosCls ? baosCls : (baosCls = loadClass("java/io/ByteArrayOutputStream")); }
 

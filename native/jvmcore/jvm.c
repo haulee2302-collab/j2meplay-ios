@@ -10,7 +10,13 @@ Class *arrCls;
 const char *cpdir;
 static Class *classes[2048]; static int nclasses;
 
+#ifdef JVM_LIB
+#include <pthread.h>
+char g_err[512];
+static void die(const char *m, const char *a) { snprintf(g_err, sizeof g_err, "%s %s", m, a ? a : ""); fprintf(stderr, "LỖI: %s\n", g_err); pthread_exit(0); }
+#else
 static void die(const char *m, const char *a) { fflush(stdout); fprintf(stderr, "LỖI: %s %s\n", m, a ? a : ""); exit(1); }
+#endif
 static uint16_t r16(const uint8_t *p) { return (p[0] << 8) | p[1]; }
 static uint32_t r32(const uint8_t *p) { return ((uint32_t)p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]; }
 
@@ -642,9 +648,12 @@ static void printUncaught(Thread *t) {
 
 // Chạy bộ điều phối cho đến khi [until] xong (nếu có) hoặc hết luồng không-daemon hoặc quá hạn.
 void (*g_idle)(void);
+volatile int g_stop; int g_keepAlive;
+extern int g_destroyed;
 static void schedule(Thread *until, int64_t deadline) {
   int last = -1;
   for (;;) {
+    if (g_stop || (g_destroyed && !until)) return;
     if (g_idle) g_idle();
     if (until && until->state == TS_DONE) return;
     int64_t now = nowMs(); if (deadline && now >= deadline) return;
@@ -665,11 +674,11 @@ static void schedule(Thread *until, int64_t deadline) {
       }
       if (t->state == TS_RUN && !pick) { pick = t; last = i; }
     }
-    if (!alive && !until) return;
+    if (!alive && !until && !g_keepAlive) return; // MIDlet (g_keepAlive) sống tới khi notifyDestroyed / dừng
     if (!pick) {
       if (earliest) { int64_t d = earliest - nowMs(); if (deadline && earliest > deadline) d = deadline - nowMs(); if (d > 0) { struct timespec ts = {d / 1000, (d % 1000) * 1000000}; nanosleep(&ts, 0); } continue; }
       if (until) return; // kẹt (deadlock)
-      if (g_idle) { struct timespec ts = {0, 2000000}; nanosleep(&ts, 0); continue; } // MIDlet: chờ sự kiện
+      if (g_keepAlive) { struct timespec ts = {0, 2000000}; nanosleep(&ts, 0); continue; } // MIDlet: chờ sự kiện
       fflush(stdout); fprintf(stderr, "[deadlock: mọi luồng đều chờ]\n"); return;
     }
     curT = pick; g_budget = BUDGET;
@@ -741,10 +750,16 @@ static void installThreadNatives(void) {
 }
 
 // ---------------- chạy ----------------
+void ioReset(void); void midpReset(void);
+static void jvmResetAll(void) {
+  memset(classes, 0, sizeof classes); nclasses = 0; arrCls = 0; strCls = 0; threadCls = 0; curT = 0; memset(threads, 0, sizeof threads); nthreads = 0;
+  memset(montab, 0, sizeof montab); g_exc = 0; g_yield = 0; g_budget = 0; nestDepth = 0; nrows = 0; g_stop = 0; g_destroyed = 0; g_keepAlive = 1;
+  ioReset(); midpReset();
+}
 static void initRuntime(void) {
   installNatives(); installThreadNatives(); installIO(); installMidp(); installMisc();
   arrCls = calloc(1, sizeof(Class)); arrCls->name = "[array"; arrCls->initState = 2; arrCls->builtin = 1;
-  interp(0); // khởi tạo bảng nhảy
+  { static int once; if (!once) { once = 1; interp(0); } } // khởi tạo bảng nhảy (một lần)
 }
 // chạy một phương thức trong luồng mới cho đến khi xong
 static int runToEnd(Method *m, Slot *args, int n, int64_t deadline) {
@@ -764,8 +779,10 @@ static void initClassNow(Class *k, int64_t deadline) {
   k->initState = 2;
 }
 
+#ifndef JVM_LIB
 extern void (*g_frameSink)(const uint8_t *, int, int);
-extern int g_frames; extern void midpKey(int, int);
+extern int g_frames; extern void midpKey(int, int); extern const char *g_rmsDir;
+#include <sys/stat.h>
 static FILE *dumpF;
 static void dumpSink(const uint8_t *d, int n, int key) { (void)key; if (dumpF) { fwrite(&n, 4, 1, dumpF); fwrite(d, 1, n, dumpF); } }
 static int64_t keyT0; static char *keySpec; static void (*realIdle)(void);
@@ -779,6 +796,7 @@ int main(int argc, char **argv) {
   if (argc > 1 && !strcmp(argv[1], "-midlet")) { mode = "midlet"; ai = 2; }
   if (argc < ai + 2) { fprintf(stderr, "dùng: %s [-midlet] <thư mục lớp> <Lớp chính> [giây]\n", argv[0]); return 1; }
   cpdir = argv[ai]; if (argc > ai + 2) secs = atoi(argv[ai + 2]);
+  { const char *e = getenv("RMS_DIR"); g_rmsDir = e ? e : "/tmp/jvmcore_rms"; mkdir(g_rmsDir, 0755); }
   initRuntime();
   Class *c = loadClass(argv[ai + 1]);
   threadCls = loadClass("java/lang/Thread");
@@ -793,6 +811,7 @@ int main(int argc, char **argv) {
     fflush(stdout);
     return 0;
   } else {
+    g_keepAlive = 1;
     const char *df = getenv("JPC_DUMP"); if (df) { dumpF = fopen(df, "wb"); g_frameSink = dumpSink; }
     keySpec = getenv("KEYS"); keyT0 = nowMs(); if (keySpec) { realIdle = g_idle; g_idle = idleWrap; }
     initClassNow(c, deadline);
@@ -805,3 +824,65 @@ int main(int argc, char **argv) {
     fflush(stdout); fprintf(stderr, "[midlet] số khung đã phát: %d\n", g_frames); if (dumpF) fclose(dumpF); return 0;
   }
 }
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#define EXPORT __attribute__((visibility("default"))) __attribute__((used))
+extern void (*g_frameSink)(const uint8_t *, int, int);
+extern const char *g_rmsDir; extern int g_sw, g_sh;
+void midpKey(int, int); void midpPointer(int, int, int); void midpSetScreen(int, int); void midpForceKey(void);
+
+// Hàng đợi khung hình giữa luồng VM và luồng giao diện (Dart)
+typedef struct { uint8_t *d; int n; } QF;
+#define QCAP 96
+static QF fq[QCAP]; static int fqh, fqt, fqn; static pthread_mutex_t fqmu = PTHREAD_MUTEX_INITIALIZER;
+static void libSink(const uint8_t *d, int n, int key) {
+  (void)key; pthread_mutex_lock(&fqmu);
+  if (fqn >= QCAP) { // giao diện không kịp lấy: bỏ hết, buộc khung kế tiếp là khung chính (vẽ lại đủ)
+    while (fqn) { free(fq[fqh].d); fqh = (fqh + 1) % QCAP; fqn--; } midpForceKey();
+  }
+  uint8_t *c = malloc(n); memcpy(c, d, n); fq[fqt].d = c; fq[fqt].n = n; fqt = (fqt + 1) % QCAP; fqn++;
+  pthread_mutex_unlock(&fqmu);
+}
+typedef struct { char dir[600], midlet[200], rms[600]; } StartArgs;
+static StartArgs g_sa; static pthread_t g_th; static volatile int g_status; // 0 chưa chạy, 1 đang chạy, 2 đã thoát, -1 lỗi
+static int g_thValid;
+static void *vmMain(void *p) {
+  (void)p; g_err[0] = 0; g_status = 1;
+  jvmResetAll(); cpdir = g_sa.dir; g_rmsDir = g_sa.rms; g_frameSink = libSink;
+  initRuntime();
+  Class *c = loadClass(g_sa.midlet); threadCls = loadClass("java/lang/Thread");
+  initClassNow(c, 0);
+  Obj *mid = newObj(c); Method *ctor = findMethod(c, "<init>", "()V"); Slot a1; a1.a = mid;
+  if (ctor) { Thread *t = newThread(ctor, &a1, 1, 0); curT = t; schedule(t, 0); }
+  Method *sa = findMethod(c, "startApp", "()V");
+  if (sa) { Thread *t = newThread(sa, &a1, 1, 0); curT = t; schedule(t, 0); }
+  schedule(0, 0);
+  g_status = 2; return 0;
+}
+static void *vmEntry(void *p) { vmMain(p); if (g_err[0]) g_status = -1; else if (g_status == 1) g_status = 2; return 0; }
+
+// ---- API cho Dart ----
+EXPORT int jvmcore_start(const char *dir, const char *midlet, const char *rms, int w, int h) {
+  if (g_thValid && g_status == 1) return -1; // đang có một giả lập chạy
+  if (g_thValid) { g_stop = 1; pthread_join(g_th, 0); g_thValid = 0; }
+  pthread_mutex_lock(&fqmu); while (fqn) { free(fq[fqh].d); fqh = (fqh + 1) % QCAP; fqn--; } pthread_mutex_unlock(&fqmu);
+  snprintf(g_sa.dir, sizeof g_sa.dir, "%s", dir); snprintf(g_sa.midlet, sizeof g_sa.midlet, "%s", midlet); snprintf(g_sa.rms, sizeof g_sa.rms, "%s", rms);
+  mkdir(rms, 0755); midpSetScreen(w, h); g_status = 1; g_stop = 0;
+  pthread_attr_t at; pthread_attr_init(&at); pthread_attr_setstacksize(&at, 16 * 1024 * 1024);
+  if (pthread_create(&g_th, &at, vmEntry, 0)) { g_status = -1; snprintf(g_err, sizeof g_err, "không tạo được luồng VM"); return -2; }
+  g_thValid = 1; return 0;
+}
+// Lấy một khung: 0 = chưa có, >0 = số byte đã chép, <0 = bộ đệm nhỏ (cần -n byte)
+EXPORT int jvmcore_poll(uint8_t *buf, int cap) {
+  int r = 0; pthread_mutex_lock(&fqmu);
+  if (fqn) { QF *f = &fq[fqh]; if (f->n > cap) r = -f->n; else { memcpy(buf, f->d, f->n); r = f->n; free(f->d); fqh = (fqh + 1) % QCAP; fqn--; } }
+  pthread_mutex_unlock(&fqmu); return r;
+}
+EXPORT void jvmcore_refresh(void) { midpForceKey(); }
+EXPORT void jvmcore_key(int type, int code) { midpKey(type, code); }
+EXPORT void jvmcore_pointer(int type, int x, int y) { midpPointer(type, x, y); }
+EXPORT int jvmcore_status(void) { return g_status; }
+EXPORT const char *jvmcore_error(void) { return g_err; }
+EXPORT void jvmcore_stop(void) { if (g_thValid) { g_stop = 1; pthread_join(g_th, 0); g_thValid = 0; } g_status = 0; }
+#endif

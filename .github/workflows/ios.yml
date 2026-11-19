@@ -23,6 +23,12 @@ jobs:
             flutter create --platforms=ios --org com.j2meplay --project-name j2meplay .
           fi
 
+      - name: Sao chép lõi C (native/jvmcore) vào plugin jvmcore
+        run: |
+          mkdir -p packages/jvmcore/ios/Classes
+          cp native/jvmcore/jvm.c native/jvmcore/natives.c native/jvmcore/io.c native/jvmcore/midp.c native/jvmcore/png.c native/jvmcore/misc.c native/jvmcore/jvm.h packages/jvmcore/ios/Classes/
+          ls packages/jvmcore/ios/Classes
+
       - run: flutter pub get
 
       - name: Icon + tên app
