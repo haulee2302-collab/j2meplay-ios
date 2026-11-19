@@ -36,7 +36,7 @@ jobs:
 
       - name: Cấu hình Google Sign-In (nếu có GOOGLE_IOS_CLIENT_ID)
         env:
-          GID: ${{ vars.GOOGLE_IOS_CLIENT_ID || '104863017124-rfqb2l3va8ud150nhlcfialfiquilelr.apps.googleusercontent.com' }}
+          GID: ${{ vars.GOOGLE_IOS_CLIENT_ID || '104863017124-fhfdvvsmfkni5nq9dim3o0a0fl0jqakl.apps.googleusercontent.com' }}
         run: |
           if [ -n "$GID" ]; then
             REV="com.googleusercontent.apps.${GID%%.apps.googleusercontent.com}"
@@ -52,7 +52,7 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | grep -E "error|Analyzing|issues" | head -60 || true
 
       - name: Build (không ký)
-        run: flutter build ios --release --no-codesign --dart-define=GOOGLE_IOS_CLIENT_ID=${{ vars.GOOGLE_IOS_CLIENT_ID || '104863017124-rfqb2l3va8ud150nhlcfialfiquilelr.apps.googleusercontent.com' }}
+        run: flutter build ios --release --no-codesign --dart-define=GOOGLE_IOS_CLIENT_ID=${{ vars.GOOGLE_IOS_CLIENT_ID || '104863017124-fhfdvvsmfkni5nq9dim3o0a0fl0jqakl.apps.googleusercontent.com' }}
 
       - name: Đóng gói IPA chưa ký
         run: |
