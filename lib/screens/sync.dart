@@ -47,6 +47,12 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
   bool groupPad = false, selectedOnly = false, controlSmall = false, showInfo = false, sidebar = false, mainKeypad = false;
   int smallSize = 210;
   Offset floatDelta = Offset.zero;
+  double _mcW = 0, _mcH = 0, _areaW = 0, _areaH = 0;
+
+  void _dragMain(Offset d) {
+    final mx = ((_areaW - _mcW) / 2).clamp(0.0, 4000.0), my = ((_areaH - _mcH) / 2).clamp(0.0, 4000.0);
+    setState(() => floatDelta = Offset((floatDelta.dx + d.dx).clamp(-mx, mx), (floatDelta.dy + d.dy).clamp(-my, my)));
+  }
   SharedPreferences? _p;
   String? toastMsg;
   Timer? _toastT;
@@ -244,6 +250,10 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
     final avail = maxH - 12 - (mainKeypad ? 150 : 0);
     final sw = (fullWidth - 50).clamp(60.0, (avail * ratio).clamp(60.0, 4000.0));
     final width = sw + 6 + 4 + 44;
+    _mcW = width;
+    _mcH = sw / ratio + 6 + (mainKeypad ? 150 : 0) + 8;
+    _areaW = fullWidth + 10;
+    _areaH = maxH + 12;
     Widget action(String k, JpIconData icon) => InkWell(
           onTap: () {
             switch (k) {
@@ -273,9 +283,9 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
             width: 44,
             decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: Jp.lineStrong)),
             clipBehavior: Clip.antiAlias,
-            child: Column(children: [
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
               GestureDetector(
-                onPanUpdate: (d) => setState(() => floatDelta += d.delta),
+                onPanUpdate: (d) => _dragMain(d.delta),
                 child: Container(
                   width: double.infinity,
                   color: Jp.primary,
