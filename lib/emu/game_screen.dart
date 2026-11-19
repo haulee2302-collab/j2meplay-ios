@@ -177,6 +177,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                                 onPointerCancel: (e) => touch('up', e.localPosition),
                                 child: RawImage(image: s.frame.value, fit: BoxFit.fill, filterQuality: Jp.fq),
                               ),
+                            if (s.midp?.form != null) Positioned.fill(child: MidpScreenView(midp: s.midp!)),
                             if (s.frame.value == null || s.error)
                               Container(
                                 color: Jp.surface,
@@ -194,8 +195,6 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                   ),
                 ),
               ),
-              if (s.midp?.form != null)
-                Positioned.fill(child: ClipRRect(borderRadius: BorderRadius.circular(7), child: MidpScreenView(midp: s.midp!))),
               if (menu) ...[
                 Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => menu = false))),
                 Positioned(

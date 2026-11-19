@@ -136,26 +136,9 @@ class _MidpScreenViewState extends State<MidpScreenView> {
     );
   }
 
-  void _menu(List<JObject> list) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Jp.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
-      builder: (c) => SafeArea(
-        child: ListView(shrinkWrap: true, children: [
-          for (final cmd in list)
-            ListTile(
-              dense: true,
-              title: Text(str(cmd.f['\$l']), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Jp.text)),
-              onTap: () {
-                Navigator.pop(c);
-                m.fireCommand(cmd);
-              },
-            ),
-        ]),
-      ),
-    );
-  }
+  List<JObject>? _menuList;
+
+  void _menu(List<JObject> list) => setState(() => _menuList = list);
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +154,7 @@ class _MidpScreenViewState extends State<MidpScreenView> {
     final cmds = [for (final c in ((o.f['\$cmds'] as List?) ?? const [])) c as JObject];
     cmds.sort((a, b) => ((a.f['\$p'] ?? 0) as int).compareTo((b.f['\$p'] ?? 0) as int));
     final isAlert = o.cls.name.endsWith('Alert');
-    return Material(
+    final page = Material(
       color: Jp.surface,
       child: Column(children: [
         Container(
@@ -184,6 +167,37 @@ class _MidpScreenViewState extends State<MidpScreenView> {
         _softBar(cmds, isAlert),
       ]),
     );
+    final ml = _menuList;
+    if (ml == null) return page;
+    return Stack(children: [
+      page,
+      Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _menuList = null), child: Container(color: const Color(0x66000000)))),
+      Positioned(
+        left: 6, right: 6, bottom: 6,
+        child: Material(
+          color: Jp.surface,
+          borderRadius: BorderRadius.circular(10),
+          elevation: 4,
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 260),
+            child: ListView(shrinkWrap: true, padding: EdgeInsets.zero, children: [
+              for (final cmd in ml)
+                InkWell(
+                  onTap: () {
+                    setState(() => _menuList = null);
+                    m.fireCommand(cmd);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    child: Text(str(cmd.f['\$l']), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Jp.text)),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      ),
+    ]);
   }
 
   @override
