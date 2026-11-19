@@ -1,15 +1,19 @@
-# jvmcore — lõi thông dịch JVM bằng C (giai đoạn 1, nguyên mẫu)
+# jvmcore — lõi thông dịch JVM bằng C (nguyên mẫu)
 
-Mục đích: đo xem bộ thông dịch C nhanh hơn bao nhiêu so với bản Dart (`lib/jvm/vm.dart`).
+Mục đích: thay bộ thông dịch Dart (`lib/jvm/vm.dart`) bằng lõi C nhanh hơn nhiều cho iOS (chỉ thông dịch, không JIT).
 
-    gcc -O2 -o jvm jvm.c -lm
-    cd test && javac --release 8 -d . Bench.java && cd ..
-    ./jvm test Bench
+    ./run_tests.sh              # build (clang/gcc) + so kết quả với JDK thật
+    ./jvm test Bench            # đo tốc độ
 
-Hiện có: đọc .class, ~190 opcode (số nguyên/long/float/double, mảng, trường, gọi hàm tĩnh/ảo/giao diện,
-khởi tạo lớp <clinit>, switch). Chưa có: GC, ngoại lệ (athrow/try-catch), luồng, chuỗi/StringBuilder,
-thư viện Java, nối với MIDP/Dart (FFI).
+Giai đoạn 1: đọc .class, ~190 opcode, <clinit>, switch, gọi tĩnh/ảo/giao diện, inline cache.
+Giai đoạn 2 (hiện tại): ngoại lệ (athrow, try/catch/finally, ngoại lệ thời gian chạy), chuỗi UTF-16 thật,
+String/StringBuilder/StringBuffer, Integer/Long/Character, Math, System, Vector/ArrayList/Stack,
+Hashtable/HashMap, Random (đúng thuật toán JDK), PrintStream, Class.getName, checkcast/instanceof có giao diện,
+multianewarray, gọi lồng nhau từ native (callMethod → equals/hashCode/toString của lớp game).
+`test/T1.java` chạy ~35 tình huống; kết quả **giống hệt JDK**.
 
-Kết quả Bench (5 bài: fib, sàng, gọi ảo, mandelbrot, mảng) — kết quả in ra khớp `java -Xint`:
-- jvmcore: ~3,4 s (~2,07 tỷ bytecode → ~600 triệu bytecode/s)
-- HotSpot `java -Xint` (thông dịch thuần): ~2,3 s
+Chưa có: GC, luồng (Thread/synchronized/wait), java.util.Timer, MIDP (đồ họa/RMS/mạng), nối Dart qua FFI,
+phần lớn thư viện (Enumeration, StringTokenizer, Calendar...).
+
+Tốc độ Bench (5 bài, ~2,07 tỷ bytecode): clang -O2 ~2,7 s (≈750 triệu bytecode/s);
+gcc -O2 ~4,2 s; HotSpot `java -Xint` ~2,3 s (máy chủ x86, không phải iPhone). Trình biên dịch của iOS là clang.
