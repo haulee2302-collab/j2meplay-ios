@@ -37,7 +37,8 @@ void regNative(const char *cls, const char *name, const char *desc, int isStatic
 // ---------------- lớp có sẵn ----------------
 typedef struct { const char *name, *super; int nInst; } BDef;
 static const BDef bdefs[] = {
-  {"java/lang/Object", 0, 0}, {"java/lang/Class", "java/lang/Object", 1}, {"java/lang/Throwable", "java/lang/Object", 2}, {"java/lang/Exception", "java/lang/Throwable", 0},
+  {"java/lang/Object", 0, 0}, {"java/lang/Class", "java/lang/Object", 1}, {"java/lang/Thread", "java/lang/Object", 3},
+  {"java/lang/IllegalMonitorStateException", "java/lang/RuntimeException", 0}, {"java/lang/IllegalThreadStateException", "java/lang/IllegalArgumentException", 0}, {"java/lang/Throwable", "java/lang/Object", 2}, {"java/lang/Exception", "java/lang/Throwable", 0},
   {"java/lang/Error", "java/lang/Throwable", 0}, {"java/lang/RuntimeException", "java/lang/Exception", 0},
   {"java/lang/IllegalArgumentException", "java/lang/RuntimeException", 0}, {"java/lang/IllegalStateException", "java/lang/RuntimeException", 0},
   {"java/lang/NullPointerException", "java/lang/RuntimeException", 0}, {"java/lang/ArithmeticException", "java/lang/RuntimeException", 0},
@@ -210,10 +211,20 @@ static void resolveField(Class *cur, int idx, FieldRef *out) {
   die("không thấy trường", name);
 }
 
-typedef struct Frame { Method *m; Slot *loc; Slot *sp; uint8_t *pc; } Frame;
-#define MAXF 4096
-static Frame frames[MAXF]; static int nf;
-static Slot *arena, *gTop;
+typedef struct Frame { Method *m; Slot *loc; Slot *sp; uint8_t *pc; void *lock; } Frame;
+#define MAXF 3000
+enum { TS_RUN, TS_SLEEP, TS_WAIT, TS_REACQ, TS_BLOCK, TS_JOIN, TS_DONE };
+typedef struct Thread {
+  Frame *fs; int nfs; Slot *arena, *top; Obj *jobj; int state; int64_t wakeAt; void *waitObj; int savedCount;
+  struct Thread *joinTarget; int daemon, interrupted, pend, id;
+} Thread;
+static Thread *curT; static Thread *threads[256]; static int nthreads;
+#define frames (curT->fs)
+#define nf (curT->nfs)
+#define gTop (curT->top)
+static int monEnter(void *o, int force);
+static int g_yield, g_budget, nestDepth;
+#define BUDGET 4000
 
 static int ensureInit(Class *c, Slot *sp) {
   if (c->initState == 2 || c->initState == 1) return 0;
@@ -224,7 +235,7 @@ static int ensureInit(Class *c, Slot *sp) {
   if (!m) { c->initState = 2; return 0; }
   if (nf >= MAXF) die("tràn ngăn xếp", 0);
   Frame *nfp = &frames[nf++];
-  nfp->m = m; nfp->loc = sp; nfp->sp = sp + m->maxLocals; nfp->pc = m->code;
+  nfp->m = m; nfp->loc = sp; nfp->sp = sp + m->maxLocals; nfp->pc = m->code; nfp->lock = 0;
   return 1;
 }
 
@@ -232,8 +243,9 @@ static int ensureInit(Class *c, Slot *sp) {
 static __attribute__((noinline, cold)) void thr(const char *cls, const char *msg) { throwNew(cls, msg); }
 static __attribute__((noinline, cold)) void thrIdx(int i, int n) { char b[96]; snprintf(b, sizeof b, "Index %d out of bounds for length %d", i, n); throwNew("java/lang/ArrayIndexOutOfBoundsException", b); }
 
-static __attribute__((noinline)) int doUnwind(int base) {
-  Obj *ex = g_exc; int first = 1;
+static void monExit(void *o);
+static __attribute__((noinline)) int doUnwind(int base, int firstFlag) {
+  Obj *ex = g_exc; int first = firstFlag;
   for (;;) {
     Frame *f = &frames[nf - 1]; Method *fm = f->m;
     int off = first ? (int)(f->pc - fm->code) : (int)(f->pc - fm->code) - 1; first = 0;
@@ -246,13 +258,14 @@ static __attribute__((noinline)) int doUnwind(int base) {
       return 1;
     }
     if (fm->cls->initState == 1 && !strcmp(fm->name, "<clinit>")) fm->cls->initState = 2;
+    if (f->lock) monExit(f->lock);
     nf--;
     if (nf == base) return 0; // g_exc vẫn đặt: người gọi xử lý
   }
 }
 
 // interp: chạy cho đến khi số khung giảm về [base]. Trả về khi hết khung hoặc có ngoại lệ chưa bắt (g_exc != 0).
-static void interp(int base) {
+static int interp(int base) {
   static void *disp[256]; static int inited = 0;
   Frame *fr = 0; Method *m = 0; Slot *loc = 0, *sp = 0; uint8_t *pc = 0, *code = 0; Class *cc = 0;
 #define PUSHI(v) (sp++->i = (v))
@@ -261,7 +274,8 @@ static void interp(int base) {
 #define SAVE() (fr->sp = sp, fr->pc = pc)
 #define LOADF() (fr = &frames[nf - 1], m = fr->m, loc = fr->loc, sp = fr->sp, pc = fr->pc, code = m->code, cc = m->cls)
 #define THROW(cls, msg) do { SAVE(); thr(cls, msg); UNWIND(); } while (0)
-#define UNWIND() do { if (doUnwind(base)) { LOADF(); NEXT; } return; } while (0)
+#define UNWIND() do { if (doUnwind(base, 1)) { LOADF(); NEXT; } return 0; } while (0)
+#define YIELD() do { SAVE(); return 1; } while (0)
 #define THROWI(i, n) do { SAVE(); thrIdx(i, n); UNWIND(); } while (0)
   if (!inited) {
     inited = 1;
@@ -301,11 +315,12 @@ static void interp(int base) {
     OP(178, L_getstatic); OP(179, L_putstatic); OP(180, L_getfield); OP(181, L_putfield);
     OP(182, L_invoke); OP(183, L_invoke); OP(184, L_invoke); OP(185, L_invoke);
     OP(187, L_new); OP(188, L_newarray); OP(189, L_anewarray); OP(190, L_arraylength); OP(191, L_athrow);
-    OP(192, L_checkcast); OP(193, L_instanceof); OP(194, L_nop); OP(195, L_nop); OP(196, L_wide); OP(197, L_multianewarray);
+    OP(192, L_checkcast); OP(193, L_instanceof); OP(194, L_monenter); OP(195, L_monexit); OP(196, L_wide); OP(197, L_multianewarray);
     OP(198, L_ifnull); OP(199, L_ifnonnull); OP(200, L_goto_w);
-    return;
+    return 0;
   }
   LOADF();
+  if (curT->pend) { curT->pend = 0; throwNew("java/lang/InterruptedException", 0); if (doUnwind(base, 0)) { LOADF(); } else return 0; }
   NEXT;
   L_bad: fflush(stdout); fprintf(stderr, "opcode %d chưa hỗ trợ tại %s.%s\n", *pc, m->cls->name, m->name); exit(2);
   L_nop: pc++; NEXT;
@@ -402,7 +417,7 @@ static void interp(int base) {
   L_ifacmpne: { void *b = sp[-1].a, *a = sp[-2].a; sp -= 2; pc += a != b ? (int16_t)r16(pc + 1) : 3; NEXT; }
   L_ifnull: { void *a = (--sp)->a; pc += a == 0 ? (int16_t)r16(pc + 1) : 3; NEXT; }
   L_ifnonnull: { void *a = (--sp)->a; pc += a != 0 ? (int16_t)r16(pc + 1) : 3; NEXT; }
-  L_goto: pc += (int16_t)r16(pc + 1); NEXT;
+  L_goto: { int16_t off = (int16_t)r16(pc + 1); pc += off; if (off < 0 && base == 0 && --g_budget <= 0) { g_budget = BUDGET; YIELD(); } NEXT; }
   L_goto_w: pc += (int32_t)r32(pc + 1); NEXT;
   L_tableswitch: { uint8_t *b0 = pc; uint8_t *q = pc + 1; q += (4 - ((q - code) & 3)) & 3; int32_t def = (int32_t)r32(q), lo = (int32_t)r32(q + 4), hi = (int32_t)r32(q + 8); int v = POPI(); pc = b0 + (v < lo || v > hi ? def : (int32_t)r32(q + 12 + 4 * (v - lo))); NEXT; }
   L_lookupswitch: { uint8_t *b0 = pc; uint8_t *q = pc + 1; q += (4 - ((q - code) & 3)) & 3; int32_t def = (int32_t)r32(q), n = (int32_t)r32(q + 4); int v = POPI(); int32_t off = def; for (int i = 0; i < n; i++) if ((int32_t)r32(q + 8 + 8 * i) == v) { off = (int32_t)r32(q + 12 + 8 * i); break; } pc = b0 + off; NEXT; }
@@ -416,8 +431,9 @@ static void interp(int base) {
     Slot rv = rs ? sp[-rs] : (Slot){0};
     if (m->cls->initState == 1 && !strcmp(m->name, "<clinit>")) m->cls->initState = 2;
     Slot *b0 = loc;
+    if (fr->lock) monExit(fr->lock);
     nf--;
-    if (nf == base) { if (rs) b0->l = rv.l; return; }
+    if (nf == base) { if (rs) b0->l = rv.l; return 0; }
     LOADF(); sp = b0; if (rs) { sp->l = rv.l; sp += rs; }
     NEXT; }
   L_getstatic: L_putstatic: {
@@ -465,8 +481,13 @@ static void interp(int base) {
       if (!subOf(o->cls, k) && ((!o->cls->builtin && !k->builtin) || (o->cls->builtin && k->builtin && o->cls->nmethods && k->nmethods))) { THROW("java/lang/ClassCastException", o->cls->name); } }
     pc += 3; NEXT; }
   L_instanceof: { Obj *o = sp[-1].a; Cp *e = &cc->cp[r16(pc + 1)]; Class *k = (Class *)e->cache; if (!k) { const char *nm = cc->cp[e->u.r.a].u.s; if (nm[0] == '[') { sp[-1].i = o && o->cls == arrCls; pc += 3; NEXT; } k = loadClass(nm); e->cache = k; } sp[-1].i = o && o->cls != arrCls && subOf(o->cls, k); pc += 3; NEXT; }
+  L_monenter: { void *o = sp[-1].a; if (!o) THROW("java/lang/NullPointerException", 0);
+    if (!monEnter(o, base != 0)) { curT->state = TS_BLOCK; curT->waitObj = o; YIELD(); }
+    sp--; pc++; NEXT; }
+  L_monexit: { void *o = sp[-1].a; if (o) monExit(o); sp--; pc++; NEXT; }
   L_athrow: { Obj *o = sp[-1].a; SAVE(); if (!o) { throwNew("java/lang/NullPointerException", 0); } else g_exc = o; UNWIND(); }
   L_invoke: {
+    if (base == 0 && --g_budget <= 0) { g_budget = BUDGET; YIELD(); }
     int op = *pc; Cp *e = &cc->cp[r16(pc + 1)];
     Site *st = (Site *)e->cache;
     if (!st) {
@@ -501,11 +522,15 @@ static void interp(int base) {
       Slot *a = sp - tm->argSlots; gTop = sp; SAVE();
       tm->native(a);
       if (g_exc) { sp = a; UNWIND(); }
-      sp = a + tm->retSlots; pc += ilen; NEXT;
+      sp = a + tm->retSlots; pc += ilen;
+      if (g_yield) { g_yield = 0; SAVE(); return 1; }
+      NEXT;
     }
+    void *lk = 0;
+    if (tm->acc & 0x20) { lk = (tm->acc & 8) ? (void *)tm->cls : sp[-tm->argSlots].a; if (!monEnter(lk, base != 0)) { curT->state = TS_BLOCK; curT->waitObj = lk; YIELD(); } }
     if (nf >= MAXF) { THROW("java/lang/StackOverflowError", 0); }
     fr->sp = sp - tm->argSlots; fr->pc = pc + ilen;
-    fr = &frames[nf++]; fr->m = tm; fr->loc = sp - tm->argSlots; fr->sp = fr->loc + tm->maxLocals; fr->pc = tm->code;
+    fr = &frames[nf++]; fr->m = tm; fr->loc = sp - tm->argSlots; fr->sp = fr->loc + tm->maxLocals; fr->pc = tm->code; fr->lock = lk;
     m = tm; loc = fr->loc; sp = fr->sp; pc = fr->pc; code = m->code; cc = m->cls; NEXT; }
 
 }
@@ -516,11 +541,13 @@ Slot callMethod(Method *m, Slot *args, int nargs) {
   if (m->native) { Slot tmp[16]; memcpy(tmp, args, nargs * sizeof(Slot)); m->native(tmp); return tmp[0]; }
   Slot *top = gTop;
   if (nf >= MAXF) { throwNew("java/lang/StackOverflowError", 0); return r; }
-  Frame *f = &frames[nf++]; f->m = m; f->loc = top; f->sp = top + m->maxLocals; f->pc = m->code;
+  Frame *f = &frames[nf++]; f->m = m; f->loc = top; f->sp = top + m->maxLocals; f->pc = m->code; f->lock = 0;
   memcpy(top, args, nargs * sizeof(Slot));
-  Slot *savedTop = gTop;
+  Slot *savedTop = gTop; Thread *me = curT;
+  nestDepth++;
   interp(nf - 1);
-  gTop = savedTop;
+  nestDepth--;
+  curT = me; gTop = savedTop;
   if (!g_exc) r = top[0];
   return r;
 }
@@ -545,26 +572,182 @@ int jequals(Obj *a, Obj *b) {
   return 0;
 }
 
-int main(int argc, char **argv) {
-  if (argc < 3) { fprintf(stderr, "dùng: %s <thư mục lớp> <Lớp chính>\n", argv[0]); return 1; }
-  cpdir = argv[1];
-  installNatives();
-  arrCls = calloc(1, sizeof(Class)); arrCls->name = "[array"; arrCls->initState = 2; arrCls->builtin = 1;
-  arena = calloc(2 << 20, sizeof(Slot)); gTop = arena;
-  interp(0); // khởi tạo bảng nhảy (inited)
-  Class *c = loadClass(argv[2]);
-  Method *mm = findMethod(c, "main", "([Ljava/lang/String;)V");
-  if (!mm) die("không có main", 0);
-  if (c->initState == 0) { Slot *sp = arena; if (ensureInit(c, sp)) { interp(0); if (g_exc) goto uncaught; } }
-  frames[nf].m = mm; frames[nf].loc = arena; frames[nf].sp = arena + mm->maxLocals; frames[nf].pc = mm->code; nf++;
-  arena[0].a = newArr(0, 8);
-  interp(0);
-  if (g_exc) {
-uncaught:
-    fflush(stdout); fprintf(stderr, "Exception in thread \"main\" %s", g_exc->cls->name);
-    if (g_exc->f[0].a) { fprintf(stderr, ": "); jprintStr(g_exc->f[0].a, stderr); }
-    fprintf(stderr, "\n"); return 1;
-  }
-  fflush(stdout);
+
+// ---------------- monitor ----------------
+typedef struct Mon { void *obj; Thread *owner; int count; struct Mon *next; } Mon;
+static Mon *montab[1024];
+static Mon *monFind(void *o, int create) {
+  unsigned h = (unsigned)(((uintptr_t)o) >> 4) % 1024; Mon *m;
+  for (m = montab[h]; m; m = m->next) if (m->obj == o) return m;
+  if (!create) return 0;
+  m = calloc(1, sizeof *m); m->obj = o; m->next = montab[h]; montab[h] = m; return m;
+}
+static int monEnter(void *o, int force) {
+  Mon *m = monFind(o, 1);
+  if (!m->owner || m->owner == curT || force) { if (m->owner != curT) { m->owner = curT; m->count = 0; } m->count++; return 1; }
   return 0;
+}
+static void monExit(void *o) { Mon *m = monFind(o, 0); if (m && m->owner == curT && --m->count <= 0) { m->owner = 0; m->count = 0; } }
+
+// ---------------- luồng ----------------
+static int64_t nowMs(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000; }
+#define STACKSLOTS (256 * 1024)
+static Thread *newThread(Method *entry, Slot *args, int nargs, Obj *jobj) {
+  Thread *t = calloc(1, sizeof *t);
+  t->fs = calloc(MAXF + 1, sizeof(Frame)); t->arena = calloc(STACKSLOTS, sizeof(Slot)); t->top = t->arena;
+  Frame *f = &t->fs[0]; f->m = entry; f->loc = t->arena; f->sp = t->arena + entry->maxLocals; f->pc = entry->code; f->lock = 0;
+  memcpy(t->arena, args, nargs * sizeof(Slot)); t->nfs = 1; t->state = TS_RUN; t->jobj = jobj; t->id = nthreads;
+  if (nthreads >= 256) die("quá nhiều luồng", 0);
+  threads[nthreads++] = t; return t;
+}
+static Class *threadCls;
+static Obj *threadObj(Thread *t) { if (!t->jobj) { t->jobj = newObj(threadCls ? threadCls : (threadCls = loadClass("java/lang/Thread"))); t->jobj->f[1].a = t; } return t->jobj; }
+
+static void printUncaught(Thread *t) {
+  fflush(stdout); fprintf(stderr, "Exception in thread \"Thread-%d\" %s", t->id, g_exc->cls->name);
+  if (g_exc->f[0].a && g_exc->cls->nInst) { fprintf(stderr, ": "); jprintStr(g_exc->f[0].a, stderr); }
+  fprintf(stderr, "\n"); g_exc = 0;
+}
+
+// Chạy bộ điều phối cho đến khi [until] xong (nếu có) hoặc hết luồng không-daemon hoặc quá hạn.
+static void schedule(Thread *until, int64_t deadline) {
+  int last = -1;
+  for (;;) {
+    if (until && until->state == TS_DONE) return;
+    int64_t now = nowMs(); if (deadline && now >= deadline) return;
+    int alive = 0; Thread *pick = 0; int64_t earliest = 0;
+    for (int k = 1; k <= nthreads; k++) {
+      int i = (last + k) % nthreads; Thread *t = threads[i];
+      if (t->state == TS_DONE) continue;
+      if (!t->daemon) alive++;
+      switch (t->state) {
+        case TS_SLEEP: if (now >= t->wakeAt) t->state = TS_RUN; else if (!earliest || t->wakeAt < earliest) earliest = t->wakeAt; break;
+        case TS_WAIT: if (t->wakeAt) { if (now >= t->wakeAt) t->state = TS_REACQ; else if (!earliest || t->wakeAt < earliest) earliest = t->wakeAt; } break;
+        case TS_JOIN: if (t->joinTarget->state == TS_DONE) t->state = TS_RUN; break;
+        default: break;
+      }
+      if (t->state == TS_REACQ || t->state == TS_BLOCK) {
+        Mon *m = monFind(t->waitObj, 1);
+        if (!m->owner) { if (t->state == TS_REACQ) { m->owner = t; m->count = t->savedCount; } t->state = TS_RUN; }
+      }
+      if (t->state == TS_RUN && !pick) { pick = t; last = i; }
+    }
+    if (!alive && !until) return;
+    if (!pick) {
+      if (earliest) { int64_t d = earliest - nowMs(); if (deadline && earliest > deadline) d = deadline - nowMs(); if (d > 0) { struct timespec ts = {d / 1000, (d % 1000) * 1000000}; nanosleep(&ts, 0); } continue; }
+      if (until) return; // kẹt (deadlock)
+      fflush(stdout); fprintf(stderr, "[deadlock: mọi luồng đều chờ]\n"); return;
+    }
+    curT = pick; g_budget = BUDGET;
+    int r = interp(0);
+    if (r == 0 || pick->nfs == 0) { if (g_exc) printUncaught(pick); pick->state = TS_DONE; }
+  }
+}
+
+// ---- native cho Thread / Object.wait,notify ----
+static void th_init(Slot *a) { Obj *o = a[0].a; o->f[0].a = 0; }
+static void th_initR(Slot *a) { Obj *o = a[0].a; o->f[0].a = a[1].a; }
+static void th_run(Slot *a) { (void)a; }
+static void th_start(Slot *a) {
+  Obj *to = a[0].a;
+  if (to->f[1].a) { throwNew("java/lang/IllegalThreadStateException", 0); return; }
+  Method *rm = findMethod(to->cls, "run", "()V"); Slot arg; arg.a = to;
+  if (rm && rm->native) { Obj *tg = to->f[0].a; if (!tg) { Thread *t = calloc(1, sizeof *t); t->state = TS_DONE; to->f[1].a = t; return; } rm = findMethod(tg->cls, "run", "()V"); arg.a = tg; }
+  if (!rm || rm->native) { throwNew("java/lang/RuntimeException", "Thread.run"); return; }
+  Thread *t = newThread(rm, &arg, 1, to); to->f[1].a = t;
+}
+static void th_join(Slot *a) { Thread *t = ((Obj *)a[0].a)->f[1].a; if (!t || t->state == TS_DONE || nestDepth) return; curT->state = TS_JOIN; curT->joinTarget = t; g_yield = 1; }
+static void th_joinJ(Slot *a) { th_join(a); }
+static void th_sleep(Slot *a) {
+  int64_t ms = a[0].l; if (ms < 0) ms = 0;
+  if (nestDepth) { struct timespec ts = {ms / 1000, (ms % 1000) * 1000000}; nanosleep(&ts, 0); return; }
+  curT->state = TS_SLEEP; curT->wakeAt = nowMs() + ms; g_yield = 1;
+}
+static void th_yield(Slot *a) { (void)a; if (!nestDepth) g_yield = 1; }
+static void th_current(Slot *a) { a[0].a = threadObj(curT); }
+static void th_nop(Slot *a) { (void)a; }
+static void th_prio(Slot *a) { a[0].i = 5; }
+static void th_setDaemon(Slot *a) { Thread *t = ((Obj *)a[0].a)->f[1].a; if (t) t->daemon = a[1].i; }
+static void th_isAlive(Slot *a) { Thread *t = ((Obj *)a[0].a)->f[1].a; a[0].i = t && t->state != TS_DONE; }
+static void th_interrupt(Slot *a) { Thread *t = ((Obj *)a[0].a)->f[1].a; if (!t) return; t->interrupted = 1; if (t->state == TS_SLEEP || t->state == TS_WAIT || t->state == TS_JOIN) { t->pend = 1; if (t->state == TS_WAIT) t->state = TS_REACQ; else t->state = TS_RUN; } }
+static void ob_wait0(Slot *a);
+static void ob_waitJ(Slot *a) {
+  Obj *o = a[0].a; int64_t ms = a[1].l; Mon *m = monFind(o, 0);
+  if (!m || m->owner != curT) { throwNew("java/lang/IllegalMonitorStateException", "current thread not owner"); return; }
+  if (nestDepth) return;
+  curT->savedCount = m->count; m->owner = 0; m->count = 0; curT->state = TS_WAIT; curT->waitObj = o; curT->wakeAt = ms > 0 ? nowMs() + ms : 0; g_yield = 1;
+}
+static void ob_wait0(Slot *a) { Slot b[2]; b[0] = a[0]; b[1].l = 0; ob_waitJ(b); }
+static void ob_notify(Slot *a) {
+  Obj *o = a[0].a; Mon *m = monFind(o, 0);
+  if (!m || m->owner != curT) { throwNew("java/lang/IllegalMonitorStateException", "current thread not owner"); return; }
+  for (int i = 0; i < nthreads; i++) if (threads[i]->state == TS_WAIT && threads[i]->waitObj == o) { threads[i]->state = TS_REACQ; return; }
+}
+static void ob_notifyAll(Slot *a) {
+  Obj *o = a[0].a; Mon *m = monFind(o, 0);
+  if (!m || m->owner != curT) { throwNew("java/lang/IllegalMonitorStateException", "current thread not owner"); return; }
+  for (int i = 0; i < nthreads; i++) if (threads[i]->state == TS_WAIT && threads[i]->waitObj == o) threads[i]->state = TS_REACQ;
+}
+static void installThreadNatives(void) {
+  const char *T = "java/lang/Thread", *O = "java/lang/Object";
+  regNative(T, "<init>", "()V", 0, th_init); regNative(T, "<init>", "(Ljava/lang/Runnable;)V", 0, th_initR); regNative(T, "<init>", "(Ljava/lang/String;)V", 0, th_init);
+  regNative(T, "start", "()V", 0, th_start); regNative(T, "run", "()V", 0, th_run); regNative(T, "join", "()V", 0, th_join); regNative(T, "join", "(J)V", 0, th_joinJ);
+  regNative(T, "sleep", "(J)V", 1, th_sleep); regNative(T, "yield", "()V", 1, th_yield); regNative(T, "currentThread", "()Ljava/lang/Thread;", 1, th_current);
+  regNative(T, "setPriority", "(I)V", 0, th_nop); regNative(T, "getPriority", "()I", 0, th_prio); regNative(T, "setDaemon", "(Z)V", 0, th_setDaemon);
+  regNative(T, "isAlive", "()Z", 0, th_isAlive); regNative(T, "interrupt", "()V", 0, th_interrupt);
+  regNative(O, "wait", "()V", 0, ob_wait0); regNative(O, "wait", "(J)V", 0, ob_waitJ); regNative(O, "notify", "()V", 0, ob_notify); regNative(O, "notifyAll", "()V", 0, ob_notifyAll);
+}
+
+// ---------------- chạy ----------------
+static void initRuntime(void) {
+  installNatives(); installThreadNatives();
+  arrCls = calloc(1, sizeof(Class)); arrCls->name = "[array"; arrCls->initState = 2; arrCls->builtin = 1;
+  interp(0); // khởi tạo bảng nhảy
+}
+// chạy một phương thức trong luồng mới cho đến khi xong
+static int runToEnd(Method *m, Slot *args, int n, int64_t deadline) {
+  Thread *t = newThread(m, args, n, 0);
+  curT = t;
+  // khởi tạo lớp chứa phương thức (nếu cần)
+  schedule(t, deadline);
+  return t->state == TS_DONE;
+}
+
+static void initClassNow(Class *k, int64_t deadline) {
+  if (!k || k->initState != 0) return;
+  if (k->super) initClassNow(k->super, deadline);
+  Method *m = 0; for (int i = 0; i < k->nmethods; i++) if (!strcmp(k->methods[i].name, "<clinit>")) m = &k->methods[i];
+  k->initState = 1;
+  if (m) { Slot none[1]; none[0].l = 0; runToEnd(m, none, 0, deadline); }
+  k->initState = 2;
+}
+
+int main(int argc, char **argv) {
+  const char *mode = "main"; int ai = 1; int secs = 5;
+  if (argc > 1 && !strcmp(argv[1], "-midlet")) { mode = "midlet"; ai = 2; }
+  if (argc < ai + 2) { fprintf(stderr, "dùng: %s [-midlet] <thư mục lớp> <Lớp chính> [giây]\n", argv[0]); return 1; }
+  cpdir = argv[ai]; if (argc > ai + 2) secs = atoi(argv[ai + 2]);
+  initRuntime();
+  Class *c = loadClass(argv[ai + 1]);
+  threadCls = loadClass("java/lang/Thread");
+  int64_t deadline = nowMs() + (int64_t)secs * 1000;
+  if (!strcmp(mode, "main")) {
+    Method *mm = findMethod(c, "main", "([Ljava/lang/String;)V");
+    if (!mm) die("không có main", 0);
+    Slot arg; arg.a = newArr(0, 8);
+    initClassNow(c, 0);
+    Thread *t = newThread(mm, &arg, 1, 0); curT = t;
+    schedule(0, 0);
+    fflush(stdout);
+    return 0;
+  } else {
+    initClassNow(c, deadline);
+    Obj *mid = newObj(c);
+    Method *ctor = findMethod(c, "<init>", "()V"); Slot a1; a1.a = mid;
+    if (ctor) { Thread *t = newThread(ctor, &a1, 1, 0); curT = t; schedule(t, deadline); }
+    Method *sa = findMethod(c, "startApp", "()V");
+    if (sa) { Thread *t = newThread(sa, &a1, 1, 0); curT = t; schedule(t, deadline); }
+    schedule(0, deadline); // để các luồng game chạy tới hạn
+    fflush(stdout); return 0;
+  }
 }
