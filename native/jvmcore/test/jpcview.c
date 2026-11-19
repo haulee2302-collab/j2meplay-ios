@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
         case 1: col = 0xFF000000 | (be32(d + o) & 0xFFFFFF); cl = be16(d + o + 4); ct = be16(d + o + 6); cr = be16(d + o + 8); cb = be16(d + o + 10); o += 13; break;
         case 2: { uint32_t id = be32(d + o); int rw = (d[o + 12] << 8) | d[o + 13], rh = (d[o + 14] << 8) | d[o + 15]; int len = be32(d + o + 16); o += 20;
           Res *r = getRes(id); if (!r) { id2[nres] = id; r = &res[nres++]; } else free(r->px);
-          r->w = rw; r->h = rh; r->px = malloc(len); for (int i = 0; i < rw * rh; i++) r->px[i] = (d[o + i * 4 + 3] << 24) | (d[o + i * 4 + 2] << 16) | (d[o + i * 4 + 1] << 8) | d[o + i * 4]; o += len; break; }
+          r->w = rw; r->h = rh; r->px = malloc(len); for (int i = 0; i < rw * rh; i++) r->px[i] = ((uint32_t)d[o + i * 4 + 3] << 24) | (d[o + i * 4] << 16) | (d[o + i * 4 + 1] << 8) | d[o + i * 4 + 2]; o += len; break; }
         case 10: { int x = be16(d + o), y = be16(d + o + 2), rw = be16(d + o + 4), rh = be16(d + o + 6); o += 8; rects++; for (int j = y; j < y + rh; j++) for (int i = x; i < x + rw; i++) put(i, j, col); break; }
         case 11: { int x0 = be16(d + o), y0 = be16(d + o + 2), x1 = be16(d + o + 4), y1 = be16(d + o + 6); o += 8; int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1, e = dx + dy; for (;;) { put(x0, y0, col); if (x0 == x1 && y0 == y1) break; int e2 = 2 * e; if (e2 >= dy) { e += dy; x0 += sx; } if (e2 <= dx) { e += dx; y0 += sy; } } break; }
         case 12: { int x = be16(d + o), y = be16(d + o + 2), rw = be16(d + o + 4), rh = be16(d + o + 6); o += 8; for (int i = x; i <= x + rw; i++) { put(i, y, col); put(i, y + rh, col); } for (int j = y; j <= y + rh; j++) { put(x, j, col); put(x + rw, j, col); } break; }
