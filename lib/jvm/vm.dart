@@ -82,6 +82,9 @@ class JMethod {
   JMethod(this.cls, this.name, this.desc, this.info, this.native) : sig = Sig.of(desc);
   bool get isStatic => info != null ? info!.isStatic : staticNative;
   bool staticNative = false;
+  late final String key = '$name$desc';
+  JClass? icCls;
+  JMethod? icTgt;
   bool get isAbstract => info != null && info!.isAbstract;
 }
 
@@ -601,7 +604,7 @@ class Vm {
         }
       }
     }
-    return cur.fcache[idx] = [k, owner];
+    return cur.fcache[idx] = [k, owner, desc == 'J' || desc == 'D'];
   }
 
   JClass? _staticOwner(JClass c, String name, String key) {
@@ -1071,9 +1074,7 @@ class Vm {
               }
               pc += 2;
               final name = r[0] as String;
-              final nt = f.m.cls.cf!.cp[(f.m.cls.cf!.cp[idx] as CpRef).b] as CpRef;
-              final big = f.m.cls.cf!.utf(nt.b);
-              final two = big == 'J' || big == 'D';
+              final two = r[2] as bool;
               if (op == 178) {
                 st[sp++] = owner.statics[name];
                 if (two) st[sp++] = null;
@@ -1090,18 +1091,14 @@ class Vm {
               final o = st[--sp];
               if (o == null) throw ex('java/lang/NullPointerException');
               st[sp++] = (o as JObject).f[r[0] as String];
-              final cf = f.m.cls.cf!;
-              final d = cf.utf((cf.cp[(cf.cp[idx] as CpRef).b] as CpRef).b);
-              if (d == 'J' || d == 'D') st[sp++] = null;
+              if (r[2] as bool) st[sp++] = null;
               break;
             }
             case 181: {
               final idx = (code[pc] << 8) | code[pc + 1];
               pc += 2;
               final r = _resolveField(f.m.cls, idx, false);
-              final cf = f.m.cls.cf!;
-              final d = cf.utf((cf.cp[(cf.cp[idx] as CpRef).b] as CpRef).b);
-              if (d == 'J' || d == 'D') sp--;
+              if (r[2] as bool) sp--;
               final v = st[--sp];
               final o = st[--sp];
               if (o == null) throw ex('java/lang/NullPointerException');
@@ -1124,7 +1121,13 @@ class Vm {
                 if (recv == null) throw ex('java/lang/NullPointerException');
                 if (op == 182 || op == 185) {
                   final rc = recv is JArray ? loadClass('java/lang/Object') : (recv as JObject).cls;
-                  target = _virtualLookup(rc, '${m.name}${m.desc}') ?? m;
+                  if (m.icCls == rc) {
+                    target = m.icTgt!;
+                  } else {
+                    target = _virtualLookup(rc, m.key) ?? m;
+                    m.icCls = rc;
+                    m.icTgt = target;
+                  }
                 }
               }
               pc += op == 185 ? 4 : 2;

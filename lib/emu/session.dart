@@ -125,12 +125,11 @@ class EmuSession extends ChangeNotifier {
     if (!BgKeep.active && !pip) return;
     final w = m.width, h = m.height, px = m.screen.px;
     final out = Uint8List(w * h * 4);
-    for (var i = 0, o = 0; i < px.length; i++, o += 4) {
+    final o32 = out.buffer.asUint32List();
+    // ARGB → RGBA (little-endian: byte0=R ... byte3=A), một lần ghi mỗi điểm ảnh.
+    for (var i = 0; i < px.length; i++) {
       final c = px[i];
-      out[o] = (c >> 16) & 255;
-      out[o + 1] = (c >> 8) & 255;
-      out[o + 2] = c & 255;
-      out[o + 3] = 255;
+      o32[i] = 0xFF000000 | ((c & 255) << 16) | (c & 0xFF00) | ((c >> 16) & 255);
     }
     if (pip) Pip.send(out, w, h);
     if (!BgKeep.active) return;
@@ -139,7 +138,8 @@ class EmuSession extends ChangeNotifier {
       _busy = false;
       final old = frame.value;
       frame.value = img;
-      old?.dispose();
+      // Ảnh cũ có thể còn đang được vẽ ở khung hiện tại: giải phóng trễ để không bị nháy/mất hình.
+      if (old != null) Future.delayed(const Duration(milliseconds: 250), old.dispose);
     });
   }
 
