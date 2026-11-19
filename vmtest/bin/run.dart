@@ -28,7 +28,7 @@ Future<void> main(List<String> args) async {
     idx++;
     final name = f.path.split(Platform.pathSeparator).last;
     final log = <String>[];
-    final vm = createVm(onLog: (s) { if (log.length < 400) log.add(s); });
+    final vm = createVm(onLog: (s) { if (log.length < 400) log.add(s); })..traceThrows = true;
     String status = 'OK';
     Midp? m;
     var paints = 0;
@@ -63,7 +63,7 @@ Future<void> main(List<String> args) async {
     for (final l in errs.take(6)) {
       summary.writeln('      $l');
     }
-    final tail = log.where((l) => !errs.contains(l)).take(8).toList();
+    final tail = paints == 0 ? log.where((l) => !errs.contains(l)).take(45).toList() : log.where((l) => !errs.contains(l) && !l.startsWith('Ném')).take(8).toList();
     for (final l in tail) {
       summary.writeln('      · $l');
     }

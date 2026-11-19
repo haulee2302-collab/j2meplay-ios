@@ -607,7 +607,14 @@ class Vm {
   }
 
   // ---------------- ném / bắt ngoại lệ ----------------
+  bool traceThrows = false;
+  int _thrown = 0;
+
   void _throw(JThread t, JObject exo, int base) {
+    if (traceThrows && _thrown < 40) {
+      _thrown++;
+      onLog?.call('Ném ${exo.cls.name}: ${jstr(exo.f['message']) ?? ''} tại ${_trace(t)}');
+    }
     while (t.frames.length > base) {
       final f = t.frames.last;
       for (final h in f.m.info!.handlers) {
