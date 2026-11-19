@@ -283,6 +283,7 @@ class Vm {
   JThread? _cur;
   JavaThrow ex(String cls, [String? msg]) {
     if (msg == null && cls == 'java/lang/NullPointerException' && _cur != null) msg = _trace(_cur!);
+    if (msg != null && cls == 'java/lang/ArrayIndexOutOfBoundsException' && _cur != null && !msg.contains('@')) msg = '$msg @ ${_trace(_cur!)}';
     final o = JObject(loadClass(cls));
     if (msg != null) o.f['message'] = str(msg);
     return JavaThrow(o);

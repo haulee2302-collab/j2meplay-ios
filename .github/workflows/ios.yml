@@ -33,8 +33,6 @@ jobs:
           P=ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" $P || true
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" $P || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:1 string location" $P || true
-          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string Chỉ dùng để giữ J2ME Play chạy nền khi có giả lập chạy ẩn. Vị trí không được đọc, lưu hay gửi đi." $P || true
 
       - name: Cấu hình Google Sign-In (nếu có GOOGLE_IOS_CLIENT_ID)
         env:

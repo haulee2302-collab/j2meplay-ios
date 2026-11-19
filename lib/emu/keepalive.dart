@@ -54,7 +54,6 @@ class BgKeep with WidgetsBindingObserver {
     try {
       if (need && !_on) {
         _on = true;
-        JpPip.locStart();
         final p = _p ??= AudioPlayer();
         await p.setAudioContext(AudioContext(
           iOS: AudioContextIOS(category: AVAudioSessionCategory.playback, options: {AVAudioSessionOptions.mixWithOthers}),
@@ -64,7 +63,6 @@ class BgKeep with WidgetsBindingObserver {
         await p.play(AssetSource('silence.wav'));
       } else if (!need && _on) {
         _on = false;
-        JpPip.locStop();
         await _p?.stop();
       } else if (need && _on && _p?.state != PlayerState.playing && active == false) {
         await _p?.resume();

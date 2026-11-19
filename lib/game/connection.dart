@@ -482,12 +482,8 @@ class GameConnection extends ChangeNotifier implements KeyTarget {
             _notify();
           }
           if (!r.skipped) {
-            final now = _now();
-            if (_queue.isEmpty || now - _lastPresentAt >= 33) await _present();
-            if (!firstFrame) {
-              firstFrame = true;
-              _notify();
-            }
+            _dirty = true;
+            _kickPresent();
           }
         } catch (_) {
           _renderer.reset();
@@ -499,6 +495,28 @@ class GameConnection extends ChangeNotifier implements KeyTarget {
       }
     } finally {
       _draining = false;
+    }
+  }
+
+  // Tách việc dựng ảnh khỏi vòng nhận khung: vẽ xong là ack ngay (server giữ nhịp đều),
+  // còn ảnh hiển thị được gộp: luôn lấy khung mới nhất, không chờ từng khung.
+  bool _dirty = false;
+  bool _presenting = false;
+
+  Future<void> _kickPresent() async {
+    if (_presenting) return;
+    _presenting = true;
+    try {
+      while (_dirty && !_stopped) {
+        _dirty = false;
+        await _present();
+        if (!firstFrame && image != null) {
+          firstFrame = true;
+          _notify();
+        }
+      }
+    } finally {
+      _presenting = false;
     }
   }
 
