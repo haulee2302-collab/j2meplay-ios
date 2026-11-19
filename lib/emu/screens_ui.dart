@@ -96,6 +96,67 @@ class _MidpScreenViewState extends State<MidpScreenView> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [head, Text(str(it.f['\$text']), style: TextStyle(fontSize: 13, color: Jp.text))]);
   }
 
+  /// Thanh phím mềm như điện thoại J2ME: phím phải = Back/Cancel/Exit/Stop, phím trái = lệnh còn lại (nhiều lệnh thì thành "Menu").
+  Widget _softBar(List<JObject> cmds, bool isAlert) {
+    int type(JObject c) => (c.f['\$t'] ?? 1) as int;
+    JObject? right;
+    for (final c in cmds) {
+      if (const [2, 3, 6, 7].contains(type(c))) {
+        right = c;
+        break;
+      }
+    }
+    final rest = [for (final c in cmds) if (c != right) c];
+    Widget key(String text, VoidCallback f, Alignment al) => Expanded(
+          child: InkWell(
+            onTap: f,
+            child: Container(
+              height: 42,
+              alignment: al,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Jp.primary)),
+            ),
+          ),
+        );
+    Widget left = const Expanded(child: SizedBox());
+    if (rest.length == 1) {
+      final c = rest.first;
+      left = key(str(c.f['\$l']), () => m.fireCommand(c), Alignment.centerLeft);
+    } else if (rest.length > 1) {
+      left = key('Menu', () => _menu(rest), Alignment.centerLeft);
+    } else if (cmds.isEmpty && isAlert) {
+      left = key('OK', m.dismissAlert, Alignment.centerLeft);
+    }
+    return Container(
+      decoration: BoxDecoration(color: Jp.surface, border: Border(top: BorderSide(color: Jp.line))),
+      child: Row(children: [
+        left,
+        if (right != null) key(str(right.f['\$l']), () => m.fireCommand(right!), Alignment.centerRight) else const Expanded(child: SizedBox()),
+      ]),
+    );
+  }
+
+  void _menu(List<JObject> list) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Jp.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
+      builder: (c) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          for (final cmd in list)
+            ListTile(
+              dense: true,
+              title: Text(str(cmd.f['\$l']), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Jp.text)),
+              onTap: () {
+                Navigator.pop(c);
+                m.fireCommand(cmd);
+              },
+            ),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (m.form == null) return const SizedBox.shrink();
@@ -120,24 +181,7 @@ class _MidpScreenViewState extends State<MidpScreenView> {
           child: Text(str(o.f['\$title']).isEmpty ? 'Game' : str(o.f['\$title']), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
         ),
         Expanded(child: _body()),
-        Container(
-          decoration: BoxDecoration(border: Border(top: BorderSide(color: Jp.line))),
-          padding: const EdgeInsets.all(8),
-          child: Row(children: [
-            if (cmds.isEmpty && isAlert) Expanded(child: FilledButton(onPressed: m.dismissAlert, child: const Text('OK'))),
-            for (final c in cmds)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(minimumSize: const Size(0, 36), padding: const EdgeInsets.symmetric(horizontal: 6)),
-                    onPressed: () => m.fireCommand(c),
-                    child: Text(str(c.f['\$l']), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                  ),
-                ),
-              ),
-          ]),
-        ),
+        _softBar(cmds, isAlert),
       ]),
     );
   }

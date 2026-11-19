@@ -308,7 +308,6 @@ class _LocalSyncScreenState extends State<LocalSyncScreen> {
                   const SizedBox(height: 8),
                   _switchRow('Hiển thị thông tin', showInfo, (v) { setState(() => showInfo = v); _save(); }),
                   const SizedBox(height: 8),
-                  _switchRow('Làm mịn hình ảnh', Jp.smooth.value, (v) { Jp.setSmooth(v); setState(() {}); }),
                   const SizedBox(height: 10),
                   _sideBtn('Tải lại tất cả', () { for (final s in all) { _restart(s); } setState(() => sidebar = false); }),
                   const SizedBox(height: 10),

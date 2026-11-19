@@ -76,7 +76,22 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
     _p?.setInt('sync_small_size', smallSize);
   }
 
-  void _tick() { if (mounted) setState(() {}); }
+  // Chỉ dựng lại cả trang khi trạng thái đổi; khung hình mới chỉ vẽ lại đúng ô đó (AnimatedBuilder) để không giật.
+  final Map<GameConnection, String> _sig = {};
+  String _sigOf(GameConnection c) => '${c.firstFrame}|${c.statusError}|${c.statusText}|${c.noGame}|${c.jarBlocked}|${c.frameW}x${c.frameH}|${identityHashCode(c.runtime)}|${c.image == null}';
+
+  void _tick() {
+    if (!mounted) return;
+    var changed = false;
+    for (final t in tiles) {
+      final g = _sigOf(t.conn);
+      if (_sig[t.conn] != g) {
+        _sig[t.conn] = g;
+        changed = true;
+      }
+    }
+    if (changed) setState(() {});
+  }
 
   @override
   void dispose() {
@@ -166,7 +181,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
           clipBehavior: Clip.antiAlias,
           child: Container(
             color: Jp.surface,
-            child: Stack(fit: StackFit.expand, children: [
+            child: AnimatedBuilder(animation: c, builder: (_, __) => Stack(fit: StackFit.expand, children: [
               if (c.image != null)
                 Listener(
                   behavior: HitTestBehavior.opaque,
@@ -192,7 +207,7 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
                                   ? Transform.scale(scale: (m(size.shortestSide / 110, 0.35, 1.0)), child: const LoadingBoxes())
                                   : Text(c.statusText.isEmpty ? 'Lỗi kết nối' : c.statusText, maxLines: 3, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Jp.danger)),
                 ),
-            ]),
+            ])),
           ),
         );
       }),
@@ -377,7 +392,6 @@ class _SyncScreenState extends State<SyncScreen> with WidgetsBindingObserver {
                   const SizedBox(height: 8),
                   _switchRow('Hiển thị thông tin', showInfo, (v) { setState(() => showInfo = v); _save(); }),
                   const SizedBox(height: 8),
-                  _switchRow('Làm mịn hình ảnh', Jp.smooth.value, (v) { Jp.setSmooth(v); setState(() {}); }),
                   const SizedBox(height: 10),
                   _sideBtn('Tải lại', () { for (final t in tiles) { t.conn.reload(); } setState(() => sidebar = false); }),
                   const SizedBox(height: 10),

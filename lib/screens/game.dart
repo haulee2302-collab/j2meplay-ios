@@ -286,7 +286,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Jp.line), boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))]),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      _toolItem(Jp.smooth.value ? 'Tắt làm mịn hình ảnh' : 'Bật làm mịn hình ảnh', JpIcons.screen, () { Jp.setSmooth(!Jp.smooth.value); setState(() {}); }),
                       _toolItem('Cửa sổ nổi', JpIcons.toolExpand, () { Floating.open(rental); Navigator.pop(context); }),
                       _toolItem('Tải lại màn hình', JpIcons.refresh, () => conn.reload()),
                       _toolItem('Khởi động lại', JpIcons.restart2, () => _action('restart')),
