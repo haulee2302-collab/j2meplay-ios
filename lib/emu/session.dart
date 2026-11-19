@@ -47,6 +47,7 @@ class EmuSession extends ChangeNotifier {
   JpcRenderer? _rend;
   bool _coreMode = false, _pumping = false, _dirtyC = false, _coreEnded = false;
   bool get coreMode => _coreMode;
+  String coreNote = '';
   late final EmuKeys keys = EmuKeys((k, ph) {
     if (_coreMode) {
       _coreKey(k, ph);
@@ -136,7 +137,8 @@ class EmuSession extends ChangeNotifier {
   Future<bool> _startCore(String jarId, Uint8List bytes) async {
     final core = JvmCore.get();
     if (core == null) {
-      _log('Lõi C không có trong bản này, dùng bộ thông dịch Dart');
+      coreNote = 'Lõi C không nạp được: ${JvmCore.lastError}';
+      _log(coreNote);
       return false;
     }
     try {
@@ -144,13 +146,15 @@ class EmuSession extends ChangeNotifier {
       final base = (await EmuStore.instanceDir(inst.id)).path;
       final prep = await prepareJar(bytes, '$base/core_$jarId', '${bytes.length}');
       if (prep == null) {
-        _log('Lõi C: không đọc được MIDlet-1, dùng bộ thông dịch Dart');
+        coreNote = 'Lõi C: không đọc được MIDlet-1 trong MANIFEST';
+        _log(coreNote);
         return false;
       }
       final rms = '$base/rms_core_$jarId';
       final rc = core.start(prep.dir, prep.midlet, rms, inst.width, inst.height);
       if (rc != 0) {
-        _log('Lõi C đang bận với giả lập khác, dùng bộ thông dịch Dart');
+        coreNote = 'Lõi C đang bận (mã $rc)';
+        _log(coreNote);
         return false;
       }
       _core = core;
@@ -163,7 +167,8 @@ class EmuSession extends ChangeNotifier {
       _set('Đang chạy (lõi C)');
       return true;
     } catch (e) {
-      _log('Lõi C lỗi: $e');
+      coreNote = 'Lõi C lỗi: $e';
+      _log(coreNote);
       _coreMode = false;
       return false;
     }
@@ -192,6 +197,7 @@ class EmuSession extends ChangeNotifier {
       final st = core.status;
       if (st == -1 && !_coreEnded) {
         _coreEnded = true;
+        coreNote = 'Lõi C dừng: ${core.error}';
         _set('Lõi C dừng: ${core.error}', err: true);
       } else if (st == 2 && !_coreEnded) {
         _coreEnded = true;

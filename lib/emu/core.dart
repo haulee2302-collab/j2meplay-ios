@@ -16,6 +16,7 @@ class JvmCore {
   static bool _tried = false;
   static const prefKey = 'emu_core';
   static bool enabled = false;
+  static String lastError = '';
 
   static Future<void> load() async {
     try {
@@ -33,17 +34,24 @@ class JvmCore {
   static JvmCore? get() {
     if (_tried) return _i;
     _tried = true;
-    if (!Platform.isIOS) return null;
+    if (!Platform.isIOS) {
+      lastError = 'không phải iOS';
+      return null;
+    }
     try {
       DynamicLibrary lib;
+      final errs = <String>[];
       try {
         lib = DynamicLibrary.process();
         lib.lookup('jvmcore_status');
-      } catch (_) {
+      } catch (e) {
+        errs.add('process: $e');
         lib = DynamicLibrary.open('jvmcore.framework/jvmcore');
+        lib.lookup('jvmcore_status');
       }
       _i = JvmCore._(lib);
     } catch (e) {
+      lastError = '$e';
       if (kDebugMode) debugPrint('[core] không nạp được lõi C: $e');
       _i = null;
     }

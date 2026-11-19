@@ -55,7 +55,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
 
   Future<void> _toggleCore() async {
     if (JvmCore.get() == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bản này chưa có lõi C, vẫn dùng bộ thông dịch Dart')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chưa nạp được lõi C: ${JvmCore.lastError}')));
       return;
     }
     await JvmCore.setEnabled(!JvmCore.enabled);
@@ -169,7 +169,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
               Row(children: [
                 Container(width: 6, height: 6, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
                 const SizedBox(width: 5),
-                Flexible(child: Text(s.error ? 'Lỗi' : (s.ready ? 'Đang chạy' : 'Đang khởi động'), maxLines: 1, style: TextStyle(fontSize: 11, color: _sub))),
+                Flexible(child: Text(s.coreNote.isNotEmpty ? s.coreNote : (s.error ? 'Lỗi' : (s.ready ? (s.coreMode ? 'Đang chạy (lõi C)' : 'Đang chạy') : 'Đang khởi động')), maxLines: 2, style: TextStyle(fontSize: 11, color: _sub))),
               ]),
             ])),
             IconButton(
