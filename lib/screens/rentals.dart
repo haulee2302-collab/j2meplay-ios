@@ -251,7 +251,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
           ),
           if (rentals.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               child: SizedBox(
                 width: double.infinity,
                 child: PrimaryButton('Xem tất cả (${viewable.length})', viewable.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => SyncScreen(rentals: viewable))),
@@ -264,6 +264,7 @@ class _RentalsScreenState extends State<RentalsScreen> {
           else Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: GridView.builder(
+              padding: EdgeInsets.zero,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: rentals.length,

@@ -216,13 +216,12 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
             Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3), decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(99)), child: Text('${list.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Jp.primary))),
           ]),
         ),
-        if (hiddenRunning.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+        Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
             child: Row(children: [
               Expanded(
                 child: SizedBox(
-                  height: 36,
+                  height: 30,
                   child: OutlinedButton(
                     onPressed: picked.isEmpty ? null : () => _viewSync(picked),
                     style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), side: BorderSide(color: Jp.lineStrong), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9))),
@@ -231,10 +230,9 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(child: PrimaryButton('Xem tất cả (${hiddenRunning.length})', () => _viewSync([for (final i in hiddenRunning) i.id]), icon: JpIcons.toolExpand, height: 36, fontSize: 12)),
+              Expanded(child: PrimaryButton('Xem tất cả (${hiddenRunning.length})', hiddenRunning.isEmpty ? null : () => _viewSync([for (final i in hiddenRunning) i.id]), icon: JpIcons.syncIcon, height: 30, fontSize: 12)),
             ]),
           ),
-        const SizedBox(height: 10),
         if (!loaded)
           const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: Jp.primary)))
         else if (list.isEmpty)
@@ -259,6 +257,7 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: GridView.builder(
+              padding: EdgeInsets.zero,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: list.length,
