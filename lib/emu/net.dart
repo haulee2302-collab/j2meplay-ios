@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import '../jvm/midp.dart';
 import '../jvm/vm.dart';
-import 'store.dart';
+import 'proxy.dart';
 
 /// Kết nối mạng một MIDlet: socket:// (TCP, có proxy SOCKS5/HTTP) và http(s)://.
 class NetConn {
@@ -301,6 +301,30 @@ void installNet(Midp midp, LocalProxy? proxy) {
     final c = open(t, ss(a[0]));
     return v.callVirtual(c, 'openDataOutputStream', '()Ljava/io/DataOutputStream;', const []);
   }, isStatic: true);
+  // java.net.Socket
+  const SK = 'java/net/Socket';
+  vm.defClass(SK, obj);
+  vm.reg(SK, '<init>', '(Ljava/lang/String;I)V', (v, t, a) {
+    final host = ss(a[1]);
+    final port = i(a, 2);
+    final c = NetConn('socket://$host:$port');
+    (a[0] as JObject).native = c;
+    vm.onLog?.call('Socket $host:$port${proxy != null ? ' qua proxy ${proxy.label}' : ''}');
+    unawaited(c.connect(host, port, proxy));
+    return vm.block(t, () => c.connected || c.failed, () {
+      if (c.failed) throw v.ex('java/io/IOException', c.err ?? 'Không kết nối được');
+      return null;
+    });
+  });
+  vm.reg(SK, 'getInputStream', '()Ljava/io/InputStream;', (v, t, a) => streamObj('java/io/DataInputStream', nc(a[0]).input));
+  vm.reg(SK, 'getOutputStream', '()Ljava/io/OutputStream;', (v, t, a) => streamObj('java/io/DataOutputStream', nc(a[0]).output));
+  vm.reg(SK, 'close', '()V', (v, t, a) { nc(a[0]).close(); return null; });
+  vm.reg(SK, 'setSoTimeout', '(I)V', (v, t, a) => null);
+  vm.reg(SK, 'setTcpNoDelay', '(Z)V', (v, t, a) => null);
+  vm.reg(SK, 'setKeepAlive', '(Z)V', (v, t, a) => null);
+  vm.reg(SK, 'isClosed', '()Z', (v, t, a) => 0);
+  vm.reg(SK, 'isConnected', '()Z', (v, t, a) => 1);
+
   // đảm bảo i() không bị báo thừa
   assert(i(const [0], 0) == 0);
 }

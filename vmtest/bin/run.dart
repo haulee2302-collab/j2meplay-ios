@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as im;
 
+import '../../lib/emu/net.dart';
 import '../../lib/jvm/jar.dart';
 import '../../lib/jvm/midp.dart';
 import '../../lib/jvm/vm.dart';
@@ -39,6 +40,7 @@ Future<void> main(List<String> args) async {
       } else {
         m = Midp(vm, 240, 320, info.attrs);
         m.install();
+        installNet(m, null);
         m.onFrame = () => paints++;
         final mid = vm.newInstance(info.midletClass!);
         unawaited(vm.runScheduler());

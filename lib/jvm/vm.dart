@@ -54,7 +54,7 @@ class JClass {
     final c = cf;
     if (c != null) {
       for (final f in c.fields) {
-        if (!f.isStatic) l.add(MapEntry(f.name, defaultFor(f.desc)));
+        if (!f.isStatic) l.add(MapEntry('${f.name}:${f.desc}', defaultFor(f.desc)));
       }
     }
     return _defaults = l;
@@ -218,7 +218,7 @@ class Vm {
         if (v is String && v.startsWith('S:')) {
           v = str(v.substring(2));
         }
-        k.statics[fi.name] = v ?? defaultFor(fi.desc);
+        k.statics['${fi.name}:${fi.desc}'] = v ?? defaultFor(fi.desc);
       }
     }
     return k;
@@ -576,21 +576,32 @@ class Vm {
     final ref = cf.cp[idx] as CpRef;
     final nt = cf.cp[ref.b] as CpRef;
     final name = cf.utf(nt.a);
+    final desc = cf.utf(nt.b);
+    final key = '$name:$desc';
     JClass? owner;
+    String k = name;
     if (isStatic) {
-      owner = _staticOwner(loadClass(cf.className(ref.a)), name);
+      owner = _staticOwner(loadClass(cf.className(ref.a)), name, key);
       if (owner == null) throw ex('java/lang/NoSuchFieldError', name);
+      k = owner.cf != null ? key : name;
+    } else {
+      for (JClass? c = loadClass(cf.className(ref.a)); c != null; c = c.sup) {
+        if (c.cf != null && c.cf!.fields.any((x) => !x.isStatic && x.name == name && x.desc == desc)) {
+          k = key;
+          break;
+        }
+      }
     }
-    return cur.fcache[idx] = [name, owner];
+    return cur.fcache[idx] = [k, owner];
   }
 
-  JClass? _staticOwner(JClass c, String name) {
-    if (c.statics.containsKey(name)) return c;
+  JClass? _staticOwner(JClass c, String name, String key) {
+    if (c.statics.containsKey(c.cf != null ? key : name)) return c;
     for (final i in c.ifaces) {
-      final r = _staticOwner(i, name);
+      final r = _staticOwner(i, name, key);
       if (r != null) return r;
     }
-    return c.sup == null ? null : _staticOwner(c.sup!, name);
+    return c.sup == null ? null : _staticOwner(c.sup!, name, key);
   }
 
   // ---------------- ném / bắt ngoại lệ ----------------
@@ -1277,6 +1288,10 @@ class Vm {
         continue outer;
       } on TypeError catch (e) {
         f.pc = opPc;
+        if (e.toString().contains("'Null'") || e.toString().contains('null')) {
+          _throw(t, ex('java/lang/NullPointerException', '${_lastNat?.cls.name}.${_lastNat?.name}').obj, base);
+          continue outer;
+        }
         _throw(t, ex('java/lang/Error', 'Lỗi kiểu trong VM: $e (native ${_lastNat?.cls.name}.${_lastNat?.name}${_lastNat?.desc}; tại ${_trace(t)})').obj, base);
         continue outer;
       }
