@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../emu/game_screen.dart';
+import '../emu/net.dart';
 import '../emu/session.dart';
 import '../emu/store.dart';
 import '../icons.dart';
@@ -159,8 +160,15 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
     }
   }
 
+  final Set<String> checked = {};
+
+  void _viewSync(List<String> ids) => Navigator.push(context, MaterialPageRoute(builder: (_) => LocalSyncScreen(ids: ids)));
+
   @override
   Widget build(BuildContext context) {
+    final hiddenRunning = [for (final i in list) if (EmuRuntime.modeOf(i.id) == 'hidden') i];
+    checked.removeWhere((id) => !hiddenRunning.any((i) => i.id == id));
+    final picked = [for (final i in hiddenRunning) if (checked.contains(i.id)) i.id];
     final running = list.where((e) => EmuRuntime.sessions.containsKey(e.id)).length;
     final extent = (MediaQuery.of(context).size.width - 34) / 2 * 3 / 4 + 104;
     return Stack(children: [
@@ -198,16 +206,26 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
             Text('Giả lập trên máy của bạn', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Jp.text)),
             const SizedBox(width: 8),
             Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3), decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(99)), child: Text('${list.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Jp.primary))),
-            const Spacer(),
-            if (list.isNotEmpty)
-              PrimaryButton('Xem tất cả', () {
-                for (final i in list) {
-                  if (!EmuRuntime.sessions.containsKey(i.id)) EmuRuntime.open(i).foreground = false;
-                }
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const LocalSyncScreen()));
-              }, icon: JpIcons.syncIcon, height: 34, fontSize: 12),
           ]),
         ),
+        if (hiddenRunning.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Row(children: [
+              Expanded(
+                child: SizedBox(
+                  height: 36,
+                  child: OutlinedButton(
+                    onPressed: picked.isEmpty ? null : () => _viewSync(picked),
+                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), side: BorderSide(color: Jp.lineStrong), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9))),
+                    child: Text('Xem đã chọn (${picked.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Jp.primary)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: PrimaryButton('Xem tất cả (${hiddenRunning.length})', () => _viewSync([for (final i in hiddenRunning) i.id]), icon: JpIcons.toolExpand, height: 36, fontSize: 12)),
+            ]),
+          ),
         const SizedBox(height: 10),
         if (!loaded)
           const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: Jp.primary)))
@@ -237,7 +255,7 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: list.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, mainAxisExtent: extent),
-              itemBuilder: (c, i) => _InstanceCard(list[i], onOpen: () => _open(list[i]), onMenu: () => _menu(list[i])),
+              itemBuilder: (c, i) => _InstanceCard(list[i], onOpen: () => _open(list[i]), onMenu: () => _menu(list[i]), checked: checked.contains(list[i].id), onCheck: (v) => setState(() { if (v) { checked.add(list[i].id); } else { checked.remove(list[i].id); } })),
             ),
           ),
         const SizedBox(height: 28),
@@ -261,7 +279,9 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
 class _InstanceCard extends StatefulWidget {
   final LocalInstance inst;
   final VoidCallback onOpen, onMenu;
-  const _InstanceCard(this.inst, {required this.onOpen, required this.onMenu});
+  final bool checked;
+  final void Function(bool) onCheck;
+  const _InstanceCard(this.inst, {required this.onOpen, required this.onMenu, this.checked = false, required this.onCheck});
   @override
   State<_InstanceCard> createState() => _InstanceCardState();
 }
@@ -312,6 +332,18 @@ class _InstanceCardState extends State<_InstanceCard> {
               StatusPill(status, mode.isNotEmpty ? Jp.success : Jp.muted, white: true),
               if (inst.proxy != null) Padding(padding: const EdgeInsets.only(top: 3), child: badge(inst.proxy!.label, fs: 9)),
             ])),
+            if (mode == 'hidden')
+              Positioned(
+                right: 8, top: 8,
+                child: GestureDetector(
+                  onTap: () => widget.onCheck(!widget.checked),
+                  child: Container(
+                    width: 20, height: 20,
+                    decoration: BoxDecoration(color: widget.checked ? Jp.primary : Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(4), border: Border.all(color: widget.checked ? Jp.primary : Jp.muted)),
+                    child: widget.checked ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
+                  ),
+                ),
+              ),
             Positioned(right: 6, bottom: 6, child: badge('${inst.width}×${inst.height}')),
           ]),
         ),
@@ -361,6 +393,20 @@ class _ConfigSheet extends StatefulWidget {
 class _ConfigSheetState extends State<_ConfigSheet> {
   late final TextEditingController name, w, h, proxyText;
   String proxyType = '';
+  bool proxyBusy = false;
+  String? proxyMsg;
+
+  Future<void> _testProxy() async {
+    final px = LocalProxy.parse(proxyText.text, proxyType);
+    if (px == null) {
+      setState(() => proxyMsg = 'Proxy sai định dạng. Dùng ip:port hoặc ip:port:user:pass');
+      return;
+    }
+    setState(() { proxyBusy = true; proxyMsg = null; });
+    String r;
+    try { r = await testProxy(px); } catch (e) { r = 'Lỗi: $e'; }
+    if (mounted) setState(() { proxyBusy = false; proxyMsg = r; });
+  }
   String jarId = '', jarName = '';
   int fps = 30;
   bool sound = true;
@@ -487,6 +533,19 @@ class _ConfigSheetState extends State<_ConfigSheet> {
                 if (proxyType != '') ...[
                   const SizedBox(height: 8),
                   TextField(controller: proxyText, maxLength: 250, decoration: _dec('ip:port hoặc ip:port:user:pass').copyWith(counterText: '')),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    SizedBox(
+                      height: 30,
+                      child: OutlinedButton(
+                        onPressed: proxyBusy ? null : _testProxy,
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12), side: BorderSide(color: Jp.lineStrong), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        child: Text(proxyBusy ? 'Đang kiểm tra...' : 'Kiểm tra proxy', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Jp.primary)),
+                      ),
+                    ),
+                  ]),
+                  if (proxyMsg != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(proxyMsg!, style: TextStyle(fontSize: 12, color: proxyMsg!.startsWith('Proxy hoạt động') ? Jp.success : Jp.danger))),
+                  if (proxyType == 'socks5') Padding(padding: const EdgeInsets.only(top: 6), child: Text('SOCKS5 áp dụng cho kết nối socket của game. Yêu cầu HTTP của game chỉ đi qua proxy kiểu HTTP.', style: TextStyle(fontSize: 11, color: Jp.muted))),
                 ],
                 const SizedBox(height: 10),
                 InkWell(

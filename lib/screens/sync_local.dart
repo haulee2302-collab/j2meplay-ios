@@ -17,7 +17,8 @@ const _amber = Color(0xFFF59E0B);
 /// "Xem tất cả" cho các giả lập J2ME chạy trên máy (giống SyncActivity của bản Android):
 /// lưới màn hình nhỏ có chọn nhóm, màn hình chính nổi kèm thanh công cụ dọc, bàn phím chung, cài đặt.
 class LocalSyncScreen extends StatefulWidget {
-  const LocalSyncScreen({super.key});
+  final List<String> ids;
+  const LocalSyncScreen({super.key, required this.ids});
   @override
   State<LocalSyncScreen> createState() => _LocalSyncScreenState();
 }
@@ -32,7 +33,7 @@ class _LocalSyncScreenState extends State<LocalSyncScreen> {
   SharedPreferences? _p;
 
   List<EmuSession> get sessions {
-    final l = EmuRuntime.sessions.values.toList()..sort((a, b) => a.inst.createdAt.compareTo(b.inst.createdAt));
+    final l = EmuRuntime.sessions.values.where((s) => widget.ids.contains(s.inst.id)).toList()..sort((a, b) => a.inst.createdAt.compareTo(b.inst.createdAt));
     return l;
   }
 

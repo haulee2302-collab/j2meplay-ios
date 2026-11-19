@@ -156,6 +156,24 @@ class NetConn {
   }
 }
 
+/// Kiểm tra proxy thật: mở kết nối TCP tới api.ipify.org:80 qua proxy rồi đọc địa chỉ IP trả về.
+Future<String> testProxy(LocalProxy px) async {
+  final c = NetConn('test');
+  await c.connect('api.ipify.org', 80, px);
+  if (c.failed) return 'Lỗi: ${c.err}';
+  c.output.sink?.call(utf8.encode('GET / HTTP/1.0\r\nHost: api.ipify.org\r\nConnection: close\r\n\r\n'));
+  final end = DateTime.now().add(const Duration(seconds: 15));
+  while (DateTime.now().isBefore(end) && !c.input.closed) {
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+  final text = String.fromCharCodes(c.input.b.sublist(c.input.p));
+  c.close();
+  final i = text.indexOf('\r\n\r\n');
+  final body = (i >= 0 ? text.substring(i + 4) : text).trim();
+  if (!text.startsWith('HTTP/')) return 'Không nhận được phản hồi từ máy chủ kiểm tra';
+  return 'Proxy hoạt động. IP ra ngoài: $body';
+}
+
 void installNet(Midp midp, LocalProxy? proxy) {
   final vm = midp.vm;
   const obj = 'java/lang/Object';
