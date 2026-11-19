@@ -48,4 +48,17 @@ class JpPip {
       await _ch.invokeMethod('dispose');
     } catch (_) {}
   }
+
+  /// Giữ app chạy nền bằng định vị độ chính xác thấp (hiện biểu tượng định vị ở thanh trạng thái).
+  static Future<void> locStart() async {
+    try {
+      await _ch.invokeMethod('locStart');
+    } catch (_) {}
+  }
+
+  static Future<void> locStop() async {
+    try {
+      await _ch.invokeMethod('locStop');
+    } catch (_) {}
+  }
 }

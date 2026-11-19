@@ -4,6 +4,7 @@ import AVKit
 import AVFoundation
 import CoreMedia
 import CoreVideo
+import CoreLocation
 
 public class JpPipPlugin: NSObject, FlutterPlugin {
   private var impl: Any?
@@ -15,6 +16,14 @@ public class JpPipPlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "locStart" {
+      DispatchQueue.main.async { LocKeep.shared.start(); result(nil) }
+      return
+    }
+    if call.method == "locStop" {
+      DispatchQueue.main.async { LocKeep.shared.stop(); result(nil) }
+      return
+    }
     guard #available(iOS 15.0, *) else {
       result(call.method == "supported" ? false : nil)
       return
@@ -169,4 +178,53 @@ final class PipImpl: NSObject, AVPictureInPictureControllerDelegate, AVPictureIn
   func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, skipByInterval skipInterval: CMTime, completion completionHandler: @escaping () -> Void) {
     completionHandler()
   }
+}
+
+
+/// Giữ app chạy nền bằng cập nhật vị trí độ chính xác thấp nhất (hiện biểu tượng định vị trên thanh trạng thái).
+/// Vị trí không được đọc, lưu hay gửi đi đâu cả.
+final class LocKeep: NSObject, CLLocationManagerDelegate {
+  static let shared = LocKeep()
+  private var mgr: CLLocationManager?
+  private var wanted = false
+
+  func start() {
+    wanted = true
+    if mgr == nil {
+      let m = CLLocationManager()
+      m.delegate = self
+      m.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+      m.distanceFilter = CLLocationDistanceMax
+      m.pausesLocationUpdatesAutomatically = false
+      mgr = m
+    }
+    guard let m = mgr else { return }
+    var st = CLAuthorizationStatus.notDetermined
+    if #available(iOS 14.0, *) { st = m.authorizationStatus } else { st = CLLocationManager.authorizationStatus() }
+    if st == .notDetermined {
+      m.requestWhenInUseAuthorization()
+    } else if st == .authorizedAlways || st == .authorizedWhenInUse {
+      begin()
+    }
+  }
+
+  private func begin() {
+    guard let m = mgr else { return }
+    m.allowsBackgroundLocationUpdates = true
+    if #available(iOS 11.0, *) { m.showsBackgroundLocationIndicator = true }
+    m.startUpdatingLocation()
+  }
+
+  func stop() {
+    wanted = false
+    mgr?.stopUpdatingLocation()
+    mgr?.allowsBackgroundLocationUpdates = false
+  }
+
+  func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+    if wanted && (status == .authorizedAlways || status == .authorizedWhenInUse) { begin() }
+  }
+
+  func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {}
+  func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 }
