@@ -148,7 +148,7 @@ class EmuSession extends ChangeNotifier {
     if (img == null) return;
     try {
       final bd = await img.toByteData(format: ui.ImageByteFormat.png);
-      if (bd != null) await (await EmuStore.shot(inst.id)).writeAsBytes(bd.buffer.asUint8List());
+      if (bd != null) { await (await EmuStore.shot(inst.id)).writeAsBytes(bd.buffer.asUint8List()); EmuRuntime.changed.value++; }
     } catch (_) {}
   }
 

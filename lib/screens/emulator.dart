@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:async';
 import 'dart:io';
 
@@ -83,6 +84,13 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
       builder: (_) => _ConfigSheet(initial: inst),
     );
     if (r == null || !mounted) return null;
+    if (inst != null && inst.jarId != r.jarId) {
+      // Đổi JAR: ảnh chụp màn hình cũ không còn đúng game
+      try {
+        final f = await EmuStore.shot(r.id);
+        if (f.existsSync()) await f.delete();
+      } catch (_) {}
+    }
     if (EmuRuntime.sessions.containsKey(r.id)) {
       EmuRuntime.close(r.id); // cấu hình đổi (JAR/kích thước...) → chạy lại bằng cấu hình mới
       LocalFloats.close(r.id);
@@ -287,19 +295,40 @@ class _InstanceCard extends StatefulWidget {
 }
 
 class _InstanceCardState extends State<_InstanceCard> {
-  File? shot, icon;
+  File? icon;
+  Uint8List? shot;
 
   @override
   void initState() {
     super.initState();
     _files();
+    EmuRuntime.changed.addListener(_files);
+  }
+
+  @override
+  void dispose() {
+    EmuRuntime.changed.removeListener(_files);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _InstanceCard old) {
+    super.didUpdateWidget(old);
+    if (old.inst.jarId != widget.inst.jarId) {
+      shot = null;
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      _files();
+    }
   }
 
   Future<void> _files() async {
     final i = widget.inst;
     final s = await EmuStore.shot(i.id);
     final ic = i.jarId.isEmpty ? null : await EmuStore.iconFile(i.jarId);
-    if (mounted) setState(() { shot = s.existsSync() ? s : null; icon = (ic != null && ic.existsSync()) ? ic : null; });
+    Uint8List? bytes;
+    try { bytes = s.existsSync() ? await s.readAsBytes() : null; } catch (_) {}
+    if (mounted) setState(() { shot = bytes; icon = (ic != null && ic.existsSync()) ? ic : null; });
   }
 
   @override
@@ -321,7 +350,7 @@ class _InstanceCardState extends State<_InstanceCard> {
           child: Stack(fit: StackFit.expand, children: [
             Container(color: Jp.gameBg),
             if (shot != null)
-              Image.file(shot!, fit: BoxFit.cover, filterQuality: FilterQuality.none)
+              Image.memory(shot!, fit: BoxFit.cover, filterQuality: FilterQuality.none, gaplessPlayback: true)
             else if (icon != null)
               Center(child: Image.file(icon!, width: 56, height: 56, filterQuality: FilterQuality.none))
             else
