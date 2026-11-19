@@ -7,6 +7,11 @@ import 'vm.dart';
 /// Bổ sung thư viện Java mà các game hay gọi (mã hoá chuỗi, Date/Calendar, số học...).
 void installExtra(Vm vm) {
   installCollections(vm);
+  vm.reg('java/lang/String', 'isEmpty', '()Z', (v, t, a) => ss(a[0]).isEmpty ? 1 : 0);
+  vm.reg('java/lang/String', 'matches', '(Ljava/lang/String;)Z', (v, t, a) {
+    final m = RegExp('^(?:${ss(a[1])})\$').firstMatch(ss(a[0]));
+    return m != null ? 1 : 0;
+  });
   const obj = 'java/lang/Object';
   int i(List a, int k) => a[k] as int;
   JObject s(String v) => vm.str(v);

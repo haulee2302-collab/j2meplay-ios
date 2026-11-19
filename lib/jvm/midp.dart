@@ -750,6 +750,16 @@ class Midp {
       if (x == null) throw v.ex('java/io/IOException', 'Ảnh không hợp lệ: $n');
       return mkImg(x);
     }, isStatic: true);
+    vm.reg(IM, 'createImage', '(Ljava/io/InputStream;)Ljavax/microedition/lcdui/Image;', (v, t, a) {
+      if (a[0] == null) throw v.ex('java/lang/NullPointerException');
+      final x = (a[0] as JObject).native;
+      if (x is! StreamIn) throw v.ex('java/io/IOException', 'Luồng ảnh không hỗ trợ');
+      final d = Uint8List.fromList(x.b.sublist(x.p));
+      x.p = x.b.length;
+      final im = decode(d);
+      if (im == null) throw v.ex('java/io/IOException', 'Ảnh không hợp lệ');
+      return mkImg(im);
+    }, isStatic: true);
     vm.reg(IM, 'createImage', '([BII)Ljavax/microedition/lcdui/Image;', (v, t, a) {
       final d = (a[0] as JArray).data;
       final b = Uint8List.fromList([for (var k = i(a, 1); k < i(a, 1) + i(a, 2); k++) (d[k] as int) & 255]);

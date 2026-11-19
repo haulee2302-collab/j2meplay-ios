@@ -275,7 +275,9 @@ class Vm {
     return o;
   }
 
+  JThread? _cur;
   JavaThrow ex(String cls, [String? msg]) {
+    if (msg == null && cls == 'java/lang/NullPointerException' && _cur != null) msg = _trace(_cur!);
     final o = JObject(loadClass(cls));
     if (msg != null) o.f['message'] = str(msg);
     return JavaThrow(o);
@@ -639,6 +641,7 @@ class Vm {
 
   // ---------------- vòng lặp thông dịch ----------------
   void _exec(JThread t, int base, int budget, bool nested) {
+    _cur = t;
     var count = 0;
     outer:
     while (t.frames.length > base) {
