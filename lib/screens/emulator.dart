@@ -753,7 +753,20 @@ class _ProxyDialog extends StatefulWidget {
 class _ProxyDialogState extends State<_ProxyDialog> {
   late final TextEditingController text = TextEditingController(text: LocalProxy.format(widget.current));
   late String type = widget.current?.type ?? 'http';
-  String? error;
+  String? error, result;
+  bool testing = false;
+
+  Future<void> _test() async {
+    final p = LocalProxy.parse(text.text, type);
+    if (p == null) {
+      setState(() => error = 'Sai định dạng. Dùng ip:port hoặc ip:port:user:pass');
+      return;
+    }
+    setState(() { testing = true; result = null; });
+    String r;
+    try { r = await testProxy(p); } catch (e) { r = 'Lỗi: $e'; }
+    if (mounted) setState(() { testing = false; result = r; });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -779,6 +792,16 @@ class _ProxyDialogState extends State<_ProxyDialog> {
         ),
         const SizedBox(height: 6),
         Text('Để trống rồi Lưu để tắt proxy. Đổi proxy sẽ chạy lại game đang mở.', style: TextStyle(fontSize: 11, color: Jp.muted)),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 32,
+          child: OutlinedButton(
+            onPressed: testing ? null : _test,
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12), side: BorderSide(color: Jp.lineStrong), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+            child: Text(testing ? 'Đang kiểm tra…' : 'Kiểm tra', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Jp.primary)),
+          ),
+        ),
+        if (result != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(result!, style: TextStyle(fontSize: 12, color: result!.startsWith('Proxy hoạt động') ? Jp.success : Jp.danger))),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(error!, style: const TextStyle(fontSize: 12, color: Jp.danger))),
       ]),
       actions: [

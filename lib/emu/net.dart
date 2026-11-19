@@ -158,6 +158,7 @@ class NetConn {
 
 /// Kiểm tra proxy thật: mở kết nối TCP tới api.ipify.org:80 qua proxy rồi đọc địa chỉ IP trả về.
 Future<String> testProxy(LocalProxy px) async {
+  final sw = Stopwatch()..start();
   final c = NetConn('test');
   await c.connect('api.ipify.org', 80, px);
   if (c.failed) return 'Lỗi: ${c.err}';
@@ -171,7 +172,7 @@ Future<String> testProxy(LocalProxy px) async {
   final i = text.indexOf('\r\n\r\n');
   final body = (i >= 0 ? text.substring(i + 4) : text).trim();
   if (!text.startsWith('HTTP/')) return 'Không nhận được phản hồi từ máy chủ kiểm tra';
-  return 'Proxy hoạt động. IP ra ngoài: $body';
+  return 'Proxy hoạt động (${sw.elapsedMilliseconds} ms). IP ra ngoài: $body';
 }
 
 void installNet(Midp midp, LocalProxy? proxy) {
