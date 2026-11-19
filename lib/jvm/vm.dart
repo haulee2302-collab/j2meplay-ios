@@ -174,6 +174,11 @@ class Vm {
   void reg(String cls, String name, String desc, NativeFn fn, {bool isStatic = false}) {
     final d = _defs[cls] ?? (throw StateError('Chưa khai báo lớp $cls'));
     d.methods['$name$desc'] = _NM(name, desc, fn, isStatic);
+    // Lớp đã nạp trước khi đăng ký thêm phương thức: cập nhật luôn bản đã nạp.
+    final k = classes[cls];
+    if (k != null) {
+      k.methods['$name$desc'] = JMethod(k, name, desc, null, fn)..staticNative = isStatic;
+    }
   }
 
   // ---------------- nạp lớp ----------------
