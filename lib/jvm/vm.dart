@@ -1,3 +1,4 @@
+import 'lazymap.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -151,8 +152,8 @@ int _d2l(double d) {
 }
 
 class Vm {
-  final Map<String, Uint8List> jarClasses = {};
-  final Map<String, Uint8List> jarResources = {};
+  final LazyJarMap jarClasses = LazyJarMap();
+  final LazyJarMap jarResources = LazyJarMap();
   final Map<String, JClass> classes = {};
   final Map<String, _NativeDef> _defs = {};
   final Map<String, JObject> _interned = {};

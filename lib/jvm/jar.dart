@@ -19,12 +19,12 @@ JarInfo loadJar(Vm vm, Uint8List bytes) {
   var manifest = '';
   for (final f in z.files) {
     if (!f.isFile) continue;
-    final data = Uint8List.fromList(f.content as List<int>);
     if (f.name.endsWith('.class')) {
-      vm.jarClasses[f.name.substring(0, f.name.length - 6)] = data;
+      vm.jarClasses.addLazy(f.name.substring(0, f.name.length - 6), f);
     } else {
-      vm.jarResources[f.name.startsWith('/') ? f.name.substring(1) : f.name] = data;
-      if (f.name.toUpperCase() == 'META-INF/MANIFEST.MF') manifest = utf8.decode(data, allowMalformed: true);
+      final key = f.name.startsWith('/') ? f.name.substring(1) : f.name;
+      vm.jarResources.addLazy(key, f);
+      if (f.name.toUpperCase() == 'META-INF/MANIFEST.MF') manifest = utf8.decode(Uint8List.fromList(f.content as List<int>), allowMalformed: true);
     }
   }
   final attrs = <String, String>{};
