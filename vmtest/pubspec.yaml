@@ -5,3 +5,4 @@ environment:
 dependencies:
   archive: ^3.6.1
   image: ^4.2.0
+  crypto: ^3.0.3

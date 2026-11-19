@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:crypto/crypto.dart' as cr;
 import 'dart:math' as math;
 
 import 'collections.dart';
@@ -26,6 +28,68 @@ void installExtra(Vm vm) {
     'file.encoding': 'ISO-8859-1',
   });
   const obj = 'java/lang/Object';
+  // ---- javax.microedition.media (không phát tiếng, chỉ để game không lỗi) ----
+  const MP = 'javax/microedition/media/';
+  vm.defClass('${MP}MediaException', 'java/lang/Exception');
+  for (final n in ['Control', 'PlayerListener', 'Player']) {
+    vm.defClass('$MP$n', null, isInterface: true);
+  }
+  vm.defClass('${MP}control/VolumeControl', null, isInterface: true);
+  vm.defClass('${MP}\$Player', obj, ifaces: ['${MP}Player', '${MP}Control']);
+  vm.defClass('${MP}Manager', obj);
+  JObject player() => JObject(vm.loadClass('${MP}\$Player'))..native = <String, int>{'state': 100, 'loop': 1};
+  vm.reg('${MP}Manager', 'createPlayer', '(Ljava/io/InputStream;Ljava/lang/String;)Ljavax/microedition/media/Player;', (v, t, a) => player(), isStatic: true);
+  vm.reg('${MP}Manager', 'createPlayer', '(Ljava/lang/String;)Ljavax/microedition/media/Player;', (v, t, a) => player(), isStatic: true);
+  vm.reg('${MP}Manager', 'playTone', '(III)V', (v, t, a) => null, isStatic: true);
+  vm.reg('${MP}Manager', 'getSupportedContentTypes', '(Ljava/lang/String;)[Ljava/lang/String;', (v, t, a) => v.newArray('[Ljava/lang/String;', 0), isStatic: true);
+  for (final m in ['start', 'stop', 'close', 'realize', 'prefetch', 'deallocate']) {
+    vm.reg('${MP}\$Player', m, '()V', (v, t, a) => null);
+  }
+  vm.reg('${MP}\$Player', 'setLoopCount', '(I)V', (v, t, a) => null);
+  vm.reg('${MP}\$Player', 'getState', '()I', (v, t, a) => 100);
+  vm.reg('${MP}\$Player', 'addPlayerListener', '(Ljavax/microedition/media/PlayerListener;)V', (v, t, a) => null);
+  vm.reg('${MP}\$Player', 'removePlayerListener', '(Ljavax/microedition/media/PlayerListener;)V', (v, t, a) => null);
+  vm.reg('${MP}\$Player', 'getControl', '(Ljava/lang/String;)Ljavax/microedition/media/Control;', (v, t, a) => null);
+  vm.reg('${MP}\$Player', 'setLevel', '(I)I', (v, t, a) => a[1]);
+  vm.reg('${MP}\$Player', 'getLevel', '()I', (v, t, a) => 50);
+  vm.reg('${MP}\$Player', 'setMute', '(Z)V', (v, t, a) => null);
+
+  // ---- java.net.URL (chỉ khai báo) ----
+  vm.defClass('java/net/MalformedURLException', 'java/io/IOException');
+  vm.defClass('java/net/URL', obj);
+  vm.reg('java/net/URL', '<init>', '(Ljava/lang/String;)V', (v, t, a) { (a[0] as JObject).native = (a[1] as JObject).native; return null; });
+  vm.reg('java/net/URL', 'toString', '()Ljava/lang/String;', (v, t, a) => vm.str((a[0] as JObject).native as String));
+  vm.reg('java/net/URL', 'openStream', '()Ljava/io/InputStream;', (v, t, a) => throw v.ex('java/io/IOException', 'URL.openStream chưa hỗ trợ'));
+
+  // ---- java.security.MessageDigest ----
+  vm.defClass('java/security/NoSuchAlgorithmException', 'java/lang/Exception');
+  vm.defClass('java/security/MessageDigest', obj);
+  const MD = 'java/security/MessageDigest';
+  vm.reg(MD, 'getInstance', '(Ljava/lang/String;)Ljava/security/MessageDigest;', (v, t, a) {
+    final n = ((a[0] as JObject).native as String).toUpperCase().replaceAll('-', '');
+    if (n != 'MD5' && n != 'SHA1' && n != 'SHA256') throw v.ex('java/security/NoSuchAlgorithmException', n);
+    return JObject(v.loadClass(MD))..native = [n, <int>[]];
+  }, isStatic: true);
+  List md(dynamic o) => (o as JObject).native as List;
+  vm.reg(MD, 'update', '([B)V', (v, t, a) { (md(a[0])[1] as List<int>).addAll([for (final b in (a[1] as JArray).data) (b as int) & 255]); return null; });
+  vm.reg(MD, 'update', '([BII)V', (v, t, a) {
+    final d = a[1] as JArray;
+    (md(a[0])[1] as List<int>).addAll([for (var k = a[2] as int; k < (a[2] as int) + (a[3] as int); k++) (d.data[k] as int) & 255]);
+    return null;
+  });
+  vm.reg(MD, 'reset', '()V', (v, t, a) { (md(a[0])[1] as List<int>).clear(); return null; });
+  JArray finish(Vm v, dynamic o) {
+    final m = md(o);
+    final data = m[1] as List<int>;
+    final d = m[0] == 'MD5' ? cr.md5.convert(data) : (m[0] == 'SHA1' ? cr.sha1.convert(data) : cr.sha256.convert(data));
+    data.clear();
+    return JArray('[B', [for (final b in d.bytes) b.toSigned(8)]);
+  }
+  vm.reg(MD, 'digest', '()[B', (v, t, a) => finish(v, a[0]));
+  vm.reg(MD, 'digest', '([B)[B', (v, t, a) {
+    (md(a[0])[1] as List<int>).addAll([for (final b in (a[1] as JArray).data) (b as int) & 255]);
+    return finish(v, a[0]);
+  });
   int i(List a, int k) => a[k] as int;
   JObject s(String v) => vm.str(v);
   String ss(dynamic o) {
