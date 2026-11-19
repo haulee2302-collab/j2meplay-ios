@@ -61,4 +61,17 @@ class JpPip {
       await _ch.invokeMethod('locStop');
     } catch (_) {}
   }
+
+  /// Thông báo cục bộ (thay thế thông báo cũ). Chỉ hiện khi app ở nền.
+  static Future<void> notify(String title, String body) async {
+    try {
+      await _ch.invokeMethod('notify', {'title': title, 'body': body});
+    } catch (_) {}
+  }
+
+  static Future<void> notifyClear() async {
+    try {
+      await _ch.invokeMethod('notifyClear');
+    } catch (_) {}
+  }
 }

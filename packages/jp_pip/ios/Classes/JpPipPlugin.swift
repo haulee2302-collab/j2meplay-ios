@@ -5,6 +5,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import CoreLocation
+import UserNotifications
 
 public class JpPipPlugin: NSObject, FlutterPlugin {
   private var impl: Any?
@@ -16,6 +17,17 @@ public class JpPipPlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "notify" {
+      let a = call.arguments as? [String: Any]
+      Notifier.post(title: (a?["title"] as? String) ?? "", body: (a?["body"] as? String) ?? "")
+      result(nil)
+      return
+    }
+    if call.method == "notifyClear" {
+      Notifier.clear()
+      result(nil)
+      return
+    }
     if call.method == "locStart" {
       DispatchQueue.main.async { LocKeep.shared.start(); result(nil) }
       return
@@ -227,4 +239,29 @@ final class LocKeep: NSObject, CLLocationManagerDelegate {
 
   func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {}
   func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+}
+
+
+/// Thông báo cục bộ "đang chạy" (logo app, không âm thanh). Cùng một mã nên thông báo sau thay thế thông báo trước.
+enum Notifier {
+  static let ident = "jp_running"
+
+  static func post(title: String, body: String) {
+    let c = UNUserNotificationCenter.current()
+    c.requestAuthorization(options: [.alert]) { granted, _ in
+      guard granted else { return }
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      content.threadIdentifier = ident
+      let req = UNNotificationRequest(identifier: ident, content: content, trigger: nil)
+      c.add(req, withCompletionHandler: nil)
+    }
+  }
+
+  static func clear() {
+    let c = UNUserNotificationCenter.current()
+    c.removeDeliveredNotifications(withIdentifiers: [ident])
+    c.removePendingNotificationRequests(withIdentifiers: [ident])
+  }
 }

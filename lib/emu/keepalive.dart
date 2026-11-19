@@ -26,6 +26,7 @@ class BgKeep with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
     active = s == AppLifecycleState.resumed;
+    _notice();
     if (active) {
       for (final e in EmuRuntime.sessions.values) {
         e.resume();
@@ -34,7 +35,20 @@ class BgKeep with WidgetsBindingObserver {
     _sync();
   }
 
+  /// Thông báo "J2ME Play đang chạy" ở màn hình khoá / Trung tâm thông báo khi app ở nền.
+  void _notice() {
+    if (!Platform.isIOS) return;
+    final list = EmuRuntime.sessions.values.toList();
+    if (active || list.isEmpty) {
+      JpPip.notifyClear();
+      return;
+    }
+    final names = [for (final e in list) e.inst.name].join(', ');
+    JpPip.notify('J2ME Play đang chạy', '${list.length} giả lập chạy ẩn: $names');
+  }
+
   Future<void> _sync() async {
+    _notice();
     if (!Platform.isIOS) return;
     final need = EmuRuntime.sessions.isNotEmpty;
     try {
