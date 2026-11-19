@@ -18,7 +18,7 @@ struct Method {
   int maxStack, maxLocals; uint8_t *code; int codeLen; ExcEntry *exc; int nexc; NativeFn native;
 };
 typedef struct { const char *name, *desc; uint16_t acc; int slot, wide; } Field;
-typedef struct { uint8_t tag; union { const char *s; int32_t i; int64_t l; double d; float f; struct { uint16_t a, b; } r; } u; void *cache; } Cp;
+typedef struct { uint8_t tag; union { const char *s; int32_t i; int64_t l; double d; float f; struct { uint16_t a, b; } r; } u; void *cache; void *cobj; } Cp;
 struct Class {
   const char *name; Class *super; int ncp; Cp *cp; int nfields, nmethods; Field *fields; Method *methods;
   int nInst; Slot *statics; int initState; int builtin; Class **ifaces; int nifaces;

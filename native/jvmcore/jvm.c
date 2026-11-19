@@ -378,7 +378,7 @@ static int interp(int base) {
     int w = *pc == 18; int idx = w ? pc[1] : r16(pc + 1); Cp *e = &cc->cp[idx];
     if (e->tag == CP_INT) PUSHI(e->u.i); else if (e->tag == CP_FLOAT) sp++->f = e->u.f;
     else if (e->tag == CP_STRING) { if (!e->cache) e->cache = newStr(cc->cp[e->u.r.a].u.s); sp++->a = e->cache; }
-    else if (e->tag == CP_CLASS) { if (!e->cache) { Obj *co = newObj(loadClass("java/lang/Class")); co->f[0].a = loadClass(cc->cp[e->u.r.a].u.s); e->cache = co; } sp++->a = e->cache; }
+    else if (e->tag == CP_CLASS) { if (!e->cobj) { Obj *co = newObj(loadClass("java/lang/Class")); co->f[0].a = loadClass(cc->cp[e->u.r.a].u.s); e->cobj = co; } sp++->a = e->cobj; }
     else sp++->a = 0;
     pc += w ? 2 : 3; NEXT; }
   L_ldc2_w: { Cp *e = &cc->cp[r16(pc + 1)]; if (e->tag == CP_LONG) sp->l = e->u.l; else sp->d = e->u.d; sp += 2; pc += 3; NEXT; }
