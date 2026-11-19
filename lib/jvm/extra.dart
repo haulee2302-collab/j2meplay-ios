@@ -7,6 +7,24 @@ import 'vm.dart';
 /// Bổ sung thư viện Java mà các game hay gọi (mã hoá chuỗi, Date/Calendar, số học...).
 void installExtra(Vm vm) {
   installCollections(vm);
+  vm.props.addAll({
+    'microedition.platform': 'Nokia6300/5.0',
+    'microedition.encoding': 'ISO-8859-1',
+    'microedition.configuration': 'CLDC-1.1',
+    'microedition.profiles': 'MIDP-2.0',
+    'microedition.locale': 'en-US',
+    'microedition.hostname': 'localhost',
+    'microedition.commports': '',
+    'microedition.media.version': '1.0',
+    'microedition.m3g.version': '1.1',
+    'file.separator': '/',
+    'path.separator': ':',
+    'line.separator': '\n',
+    'user.dir': '/',
+    'java.version': '1.3',
+    'os.name': 'J2ME',
+    'file.encoding': 'ISO-8859-1',
+  });
   const obj = 'java/lang/Object';
   int i(List a, int k) => a[k] as int;
   JObject s(String v) => vm.str(v);

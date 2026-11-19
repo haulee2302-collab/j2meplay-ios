@@ -7,6 +7,24 @@ import 'package:image/image.dart' as im;
 import 'gfx.dart';
 import 'vm.dart';
 
+class _CharSrc {
+  final List<int> c;
+  int p = 0;
+  _CharSrc(this.c);
+}
+
+void _rdInit(dynamic self, dynamic stream, String enc) {
+  final x = (stream as JObject).native;
+  var bytes = <int>[];
+  if (x is StreamIn) {
+    bytes = x.b.sublist(x.p);
+    x.p = x.b.length;
+  }
+  final e = enc.toUpperCase();
+  final str = e.contains('8859') || e.contains('ASCII') ? String.fromCharCodes(bytes) : utf8.decode(bytes, allowMalformed: true);
+  (self as JObject).native = _CharSrc(str.codeUnits);
+}
+
 class StreamIn {
   Uint8List b;
   int p = 0;
@@ -380,6 +398,24 @@ class Midp {
       x.p += n;
       return n;
     });
+    vm.defClass('java/io/Reader', 'java/lang/Object');
+    vm.defClass('java/io/InputStreamReader', 'java/io/Reader');
+    vm.reg('java/io/InputStreamReader', '<init>', '(Ljava/io/InputStream;)V', (v, t, a) { _rdInit(a[0], a[1], 'UTF-8'); return null; });
+    vm.reg('java/io/InputStreamReader', '<init>', '(Ljava/io/InputStream;Ljava/lang/String;)V', (v, t, a) { _rdInit(a[0], a[1], (a[2] as JObject).native as String); return null; });
+    vm.reg('java/io/InputStreamReader', 'read', '()I', (v, t, a) {
+      final x = (a[0] as JObject).native as _CharSrc;
+      return x.p < x.c.length ? x.c[x.p++] : -1;
+    });
+    vm.reg('java/io/InputStreamReader', 'read', '([CII)I', (v, t, a) {
+      final x = (a[0] as JObject).native as _CharSrc;
+      final arr = a[1] as JArray;
+      if (x.p >= x.c.length) return -1;
+      var n = 0;
+      while (n < (a[3] as int) && x.p < x.c.length) { arr.data[(a[2] as int) + n++] = x.c[x.p++]; }
+      return n;
+    });
+    vm.reg('java/io/InputStreamReader', 'ready', '()Z', (v, t, a) { final x = (a[0] as JObject).native as _CharSrc; return x.p < x.c.length ? 1 : 0; });
+    vm.reg('java/io/InputStreamReader', 'close', '()V', (v, t, a) => null);
     vm.reg(IN, 'close', '()V', (v, t, a) {
       final x = (a[0] as JObject).native;
       if (x is StreamIn) x.closed = true;
