@@ -330,14 +330,14 @@ class _InstanceCardState extends State<_InstanceCard> {
   }
 }
 
-Widget _chip(String text, bool on, VoidCallback f) => GestureDetector(
+Widget _chip(String text, bool on, VoidCallback f, {bool fill = false}) => GestureDetector(
       onTap: f,
       child: Container(
         height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: EdgeInsets.symmetric(horizontal: fill ? 2 : 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(color: on ? Jp.primary : Jp.surface, borderRadius: BorderRadius.circular(8), border: Border.all(color: on ? Jp.primary : Jp.lineStrong)),
-        child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: on ? Colors.white : Jp.primary)),
+        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: fill ? 11 : 12, fontWeight: FontWeight.w600, color: on ? Colors.white : Jp.primary)),
       ),
     );
 
@@ -350,7 +350,8 @@ class _ConfigSheet extends StatefulWidget {
 }
 
 class _ConfigSheetState extends State<_ConfigSheet> {
-  late final TextEditingController name, w, h;
+  late final TextEditingController name, w, h, proxyText;
+  String proxyType = '';
   String jarId = '', jarName = '';
   int fps = 30;
   bool sound = true;
@@ -367,6 +368,8 @@ class _ConfigSheetState extends State<_ConfigSheet> {
     jarName = i?.jarName ?? '';
     fps = i?.fps ?? 30;
     sound = i?.sound ?? true;
+    proxyText = TextEditingController(text: LocalProxy.format(i?.proxy));
+    proxyType = i?.proxy?.type ?? '';
   }
 
   Future<void> _pickJar() async {
@@ -397,6 +400,11 @@ class _ConfigSheetState extends State<_ConfigSheet> {
     } else if (ww < 96 || ww > 1080 || hh < 96 || hh > 1920) {
       e = 'Kích thước từ 96×96 đến 1080×1920';
     }
+    LocalProxy? px;
+    if (e == null && proxyType != '' && proxyText.text.trim().isNotEmpty) {
+      px = LocalProxy.parse(proxyText.text, proxyType);
+      if (px == null) e = 'Proxy sai định dạng. Dùng ip:port hoặc ip:port:user:pass';
+    }
     if (e != null) {
       setState(() => error = e);
       return;
@@ -404,7 +412,7 @@ class _ConfigSheetState extends State<_ConfigSheet> {
     final i = widget.initial;
     if (!mounted) return;
     Navigator.pop(context, LocalInstance(i?.id ?? newId(), name.text.trim(), jarName, ww, hh, fps, sound, i?.joystick ?? true, i?.createdAt ?? DateTime.now().millisecondsSinceEpoch,
-        lastPlayed: i?.lastPlayed ?? 0, jarId: jarId, proxy: i?.proxy));
+        lastPlayed: i?.lastPlayed ?? 0, jarId: jarId, proxy: px));
   }
 
   Widget _label(String t) => Padding(padding: const EdgeInsets.only(top: 8, bottom: 4), child: Text(t, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Jp.muted)));
@@ -453,7 +461,24 @@ class _ConfigSheetState extends State<_ConfigSheet> {
                   Expanded(child: TextField(controller: h, keyboardType: TextInputType.number, maxLength: 4, decoration: _dec('Cao').copyWith(counterText: ''))),
                 ]),
                 _label('Giới hạn hình / giây'),
-                Wrap(spacing: 6, runSpacing: 6, children: [for (final f in [15, 30, 60, 0]) _chip(f == 0 ? 'Không giới hạn' : '$f', fps == f, () => setState(() => fps = f))]),
+                Row(children: [
+                  for (final f in [15, 30, 60, 0]) ...[
+                    if (f != 15) const SizedBox(width: 6),
+                    Expanded(child: _chip(f == 0 ? 'Không giới hạn' : '$f', fps == f, () => setState(() => fps = f), fill: true)),
+                  ],
+                ]),
+                _label('Proxy'),
+                Row(children: [
+                  Expanded(child: _chip('Không', proxyType == '', () => setState(() => proxyType = ''), fill: true)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _chip('HTTP', proxyType == 'http', () => setState(() => proxyType = 'http'), fill: true)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _chip('SOCKS5', proxyType == 'socks5', () => setState(() => proxyType = 'socks5'), fill: true)),
+                ]),
+                if (proxyType != '') ...[
+                  const SizedBox(height: 8),
+                  TextField(controller: proxyText, maxLength: 250, decoration: _dec('ip:port hoặc ip:port:user:pass').copyWith(counterText: '')),
+                ],
                 const SizedBox(height: 10),
                 InkWell(
                   onTap: () => setState(() => sound = !sound),
