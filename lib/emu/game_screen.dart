@@ -55,7 +55,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
 
   Future<void> _toggleCore() async {
     if (JvmCore.get() == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chưa nạp được lõi C: ${JvmCore.lastError}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Chưa nạp được lõi C: ${JvmCore.lastError}')));
       return;
     }
     await JvmCore.setEnabled(!JvmCore.enabled);
