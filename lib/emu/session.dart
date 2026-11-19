@@ -55,7 +55,7 @@ class EmuSession extends ChangeNotifier {
     if (kDebugMode) debugPrint('[emu] $s');
   }
 
-  Future<File> _rmsFile() async => File('${(await EmuStore.instanceDir(inst.id)).path}/rms.json');
+  Future<File> _rmsFile() async => File('${(await EmuStore.instanceDir(inst.id)).path}/rms_${inst.jarId}.json');
 
   Future<void> start() async {
     try {
