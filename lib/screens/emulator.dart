@@ -10,6 +10,7 @@ import '../emu/store.dart';
 import '../icons.dart';
 import '../theme.dart';
 import 'floating.dart';
+import 'sync_local.dart';
 import '../widgets.dart';
 
 /// Tab "Giả lập": giống bản Android — giả lập J2ME chạy ngay trên máy từ JAR trong Kho JAR thiết bị.
@@ -197,6 +198,14 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
             Text('Giả lập trên máy của bạn', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Jp.text)),
             const SizedBox(width: 8),
             Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3), decoration: BoxDecoration(color: Jp.primarySoft, borderRadius: BorderRadius.circular(99)), child: Text('${list.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Jp.primary))),
+            const Spacer(),
+            if (list.isNotEmpty)
+              PrimaryButton('Xem tất cả', () {
+                for (final i in list) {
+                  if (!EmuRuntime.sessions.containsKey(i.id)) EmuRuntime.open(i).foreground = false;
+                }
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const LocalSyncScreen()));
+              }, icon: JpIcons.syncIcon, height: 34, fontSize: 12),
           ]),
         ),
         const SizedBox(height: 10),

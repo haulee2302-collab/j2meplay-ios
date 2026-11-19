@@ -187,7 +187,6 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                                   Text(s.status, textAlign: TextAlign.center, style: TextStyle(color: s.error ? Jp.danger : const Color(0xFF1769D9), fontSize: 13, fontWeight: FontWeight.w600)),
                                 ]),
                               ),
-                            if (s.midp?.form != null) Positioned.fill(child: MidpScreenView(midp: s.midp!)),
                           ]);
                         }),
                       ),
@@ -195,6 +194,8 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                   ),
                 ),
               ),
+              if (s.midp?.form != null)
+                Positioned.fill(child: ClipRRect(borderRadius: BorderRadius.circular(7), child: MidpScreenView(midp: s.midp!))),
               if (menu) ...[
                 Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => menu = false))),
                 Positioned(
