@@ -71,7 +71,9 @@ class EmuSession extends ChangeNotifier {
 
   Future<File> _rmsFile() async => File('${(await EmuStore.instanceDir(inst.id)).path}/rms_${inst.jarId}.json');
 
-  Future<void> start() async {
+  Timer? _watch;
+
+  Future<void> start({bool forceDart = false}) async {
     try {
       _set('Đang chuẩn bị game…');
       final jars = await EmuStore.listJars();
@@ -81,7 +83,7 @@ class EmuSession extends ChangeNotifier {
         return;
       }
       final Uint8List bytes = await (await EmuStore.jarFile(jar.first.id)).readAsBytes();
-      if (JvmCore.enabled && await _startCore(jar.first.id, bytes)) return;
+      if (!forceDart && JvmCore.enabled && await _startCore(jar.first.id, bytes)) return;
       await Glyphs.build();
       final v = createVm(onLog: _log);
       v.props['microedition.platform'] = 'J2ME Play';
@@ -165,6 +167,7 @@ class EmuSession extends ChangeNotifier {
       _timer = Timer.periodic(Duration(milliseconds: ms), (_) => _pumpCore());
       ready = true;
       _set('Đang chạy (lõi C)');
+      _watch = Timer(const Duration(seconds: 8), _coreWatchdog);
       return true;
     } catch (e) {
       coreNote = 'Lõi C lỗi: $e';
@@ -172,6 +175,27 @@ class EmuSession extends ChangeNotifier {
       _coreMode = false;
       return false;
     }
+  }
+
+  /// Sau 8 giây lõi C vẫn chưa ra khung hình nào: lấy log, dừng lõi và chạy lại bằng bộ thông dịch Dart.
+  Future<void> _coreWatchdog() async {
+    if (!_coreMode || frame.value != null) return;
+    final core = _core;
+    var lg = '';
+    try {
+      lg = (core?.log ?? '').trim();
+    } catch (_) {}
+    final first = lg.split('\n').where((l) => l.trim().isNotEmpty).take(4).join(' | ');
+    coreNote = 'Lõi C không ra hình: ${first.isEmpty ? 'không có lỗi nào được ghi' : first}. Đã chuyển sang bộ thông dịch Dart';
+    _log(coreNote);
+    _timer?.cancel();
+    _core?.stop();
+    _core = null;
+    _rend?.close();
+    _rend = null;
+    _coreMode = false;
+    notifyListeners();
+    await start(forceDart: true);
   }
 
   Future<void> _pumpCore() async {
@@ -195,6 +219,11 @@ class EmuSession extends ChangeNotifier {
       }
       if (any) _presentCore();
       final st = core.status;
+      if ((st == -1 || st == 2) && frame.value == null && !_coreEnded) {
+        _coreEnded = true;
+        await _coreWatchdog();
+        return;
+      }
       if (st == -1 && !_coreEnded) {
         _coreEnded = true;
         coreNote = 'Lõi C dừng: ${core.error}';
@@ -308,6 +337,7 @@ class EmuSession extends ChangeNotifier {
 
   void stop() {
     _timer?.cancel();
+    _watch?.cancel();
     if (_coreMode) {
       _coreMode = false;
       _core?.stop();

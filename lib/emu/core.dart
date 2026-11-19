@@ -65,6 +65,7 @@ class JvmCore {
   final int Function() _status;
   final Pointer<Utf8> Function() _error;
   final void Function() _stop, _refresh;
+  final Pointer<Utf8> Function() _log;
   Pointer<Uint8> _buf = malloc<Uint8>(1 << 20);
   int _cap = 1 << 20;
 
@@ -76,12 +77,16 @@ class JvmCore {
         _status = l.lookupFunction<Int32 Function(), int Function()>('jvmcore_status'),
         _error = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_error'),
         _stop = l.lookupFunction<Void Function(), void Function()>('jvmcore_stop'),
-        _refresh = l.lookupFunction<Void Function(), void Function()>('jvmcore_refresh');
+        _refresh = l.lookupFunction<Void Function(), void Function()>('jvmcore_refresh'),
+        _log = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_log');
 
   /// 0 chưa chạy · 1 đang chạy · 2 đã thoát · -1 lỗi
   int get status => _status();
   String get error => _error().toDartString();
   bool get busy => _status() == 1;
+
+  /// Các dòng lỗi đầu tiên của lõi (ngoại lệ chưa bắt, API chưa cài...).
+  String get log => _log().toDartString();
 
   /// 0 = chạy; -1 = lõi đang bận với một giả lập khác.
   int start(String dir, String midlet, String rms, int w, int h) {

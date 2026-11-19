@@ -10,10 +10,17 @@ Class *arrCls;
 const char *cpdir;
 static Class *classes[2048]; static int nclasses;
 
+#include <stdarg.h>
+char g_log[8192]; static int g_loglen;
+void jlogf(const char *fmt, ...) {
+  char b[700]; va_list ap; va_start(ap, fmt); vsnprintf(b, sizeof b, fmt, ap); va_end(ap);
+  fputs(b, stderr); int n = (int)strlen(b); if (g_loglen + n < (int)sizeof g_log - 1) { memcpy(g_log + g_loglen, b, n); g_loglen += n; g_log[g_loglen] = 0; }
+}
+static void jlogStr(Obj *s) { char b[300]; int n = 0; for (int i = 0; i < S_LEN(s) && n < 280; i++) { uint16_t c = S_CH(s)[i]; b[n++] = c < 128 ? (char)c : '?'; } b[n] = 0; jlogf("%s", b); }
 #ifdef JVM_LIB
 #include <pthread.h>
 char g_err[512];
-static void die(const char *m, const char *a) { snprintf(g_err, sizeof g_err, "%s %s", m, a ? a : ""); fprintf(stderr, "LỖI: %s\n", g_err); pthread_exit(0); }
+static void die(const char *m, const char *a) { snprintf(g_err, sizeof g_err, "%s %s", m, a ? a : ""); jlogf("LỖI: %s\n", g_err); pthread_exit(0); }
 #else
 static void die(const char *m, const char *a) { fflush(stdout); fprintf(stderr, "LỖI: %s %s\n", m, a ? a : ""); exit(1); }
 #endif
@@ -264,7 +271,7 @@ static int g_yield, g_budget, nestDepth;
 
 static int ensureInit(Class *c, Slot *sp) {
   if (c->initState == 2 || c->initState == 1) return 0;
-  if (c->super && c->super->initState == 0) return ensureInit(c->super, sp);
+  if (c->super && c->super->initState == 0 && ensureInit(c->super, sp)) return 1; // siêu lớp có <clinit>: chạy trước, lệnh sẽ được thực thi lại
   c->initState = 1;
   Method *m = 0;
   for (int i = 0; i < c->nmethods; i++) if (!strcmp(c->methods[i].name, "<clinit>")) m = &c->methods[i];
@@ -358,7 +365,7 @@ static int interp(int base) {
   LOADF();
   if (curT->pend) { curT->pend = 0; throwNew("java/lang/InterruptedException", 0); if (doUnwind(base, 0)) { LOADF(); } else return 0; }
   NEXT;
-  L_bad: fflush(stdout); fprintf(stderr, "opcode %d chưa hỗ trợ tại %s.%s\n", *pc, m->cls->name, m->name); exit(2);
+  L_bad: { char ob[200]; snprintf(ob, sizeof ob, "opcode %d tại %s.%s", *pc, m->cls->name, m->name); die("opcode chưa hỗ trợ", ob); }
   L_nop: pc++; NEXT;
   L_aconst_null: sp++->a = 0; pc++; NEXT;
   L_iconst: PUSHI(*pc - 3); pc++; NEXT;
@@ -536,7 +543,7 @@ static int interp(int base) {
       if (!tm) { // phương thức thư viện chưa cài
         tm = calloc(1, sizeof(Method)); tm->cls = oc; tm->name = name; tm->desc = desc; tm->acc = 0x100 | (op == 184 ? 8 : 0);
         tm->argSlots = argSlotsOf(desc, &tm->retSlots) + (op == 184 ? 0 : 1);
-        if (!oc->builtin) { fflush(stdout); fprintf(stderr, "không thấy phương thức %s.%s%s\n", oc->name, name, desc); }
+        if (!oc->builtin) { fflush(stdout); jlogf("không thấy phương thức %s.%s%s\n", oc->name, name, desc); }
       }
       st->tm = tm; e->cache = st;
     }
@@ -553,7 +560,7 @@ static int interp(int base) {
     if (tm->native || (tm->acc & 0x100)) {
       if (!tm->native) { // chưa cài: bỏ qua, trả 0/null
         static char seen[4096]; (void)seen; fflush(stdout);
-        fprintf(stderr, "[chưa cài] %s.%s%s\n", tm->cls->name, tm->name, tm->desc);
+        { static Method *seenM[128]; static int ns; int dup = 0; for (int q = 0; q < ns; q++) if (seenM[q] == tm) dup = 1; if (!dup) { if (ns < 128) seenM[ns++] = tm; jlogf("[chưa cài] %s.%s%s\n", tm->cls->name, tm->name, tm->desc); } }
         sp -= tm->argSlots; if (tm->retSlots) { sp->l = 0; sp += tm->retSlots; } pc += ilen; NEXT;
       }
       Slot *a = sp - tm->argSlots; gTop = sp; SAVE();
@@ -641,9 +648,9 @@ static Class *threadCls;
 static Obj *threadObj(Thread *t) { if (!t->jobj) { t->jobj = newObj(threadCls ? threadCls : (threadCls = loadClass("java/lang/Thread"))); t->jobj->f[1].a = t; } return t->jobj; }
 
 static void printUncaught(Thread *t) {
-  fflush(stdout); fprintf(stderr, "Exception in thread \"Thread-%d\" %s", t->id, g_exc->cls->name);
-  if (g_exc->f[0].a && g_exc->cls->nInst) { fprintf(stderr, ": "); jprintStr(g_exc->f[0].a, stderr); }
-  fprintf(stderr, "\n"); g_exc = 0;
+  fflush(stdout); jlogf("Exception in thread \"Thread-%d\" %s", t->id, g_exc->cls->name);
+  if (g_exc->f[0].a && g_exc->cls->nInst) { jlogf(": "); jlogStr(g_exc->f[0].a); }
+  jlogf("\n"); g_exc = 0;
 }
 
 // Chạy bộ điều phối cho đến khi [until] xong (nếu có) hoặc hết luồng không-daemon hoặc quá hạn.
@@ -679,7 +686,7 @@ static void schedule(Thread *until, int64_t deadline) {
       if (earliest) { int64_t d = earliest - nowMs(); if (deadline && earliest > deadline) d = deadline - nowMs(); if (d > 0) { struct timespec ts = {d / 1000, (d % 1000) * 1000000}; nanosleep(&ts, 0); } continue; }
       if (until) return; // kẹt (deadlock)
       if (g_keepAlive) { struct timespec ts = {0, 2000000}; nanosleep(&ts, 0); continue; } // MIDlet: chờ sự kiện
-      fflush(stdout); fprintf(stderr, "[deadlock: mọi luồng đều chờ]\n"); return;
+      fflush(stdout); jlogf("[deadlock: mọi luồng đều chờ]\n"); return;
     }
     curT = pick; g_budget = BUDGET;
     int r = interp(0);
@@ -848,7 +855,7 @@ typedef struct { char dir[600], midlet[200], rms[600]; } StartArgs;
 static StartArgs g_sa; static pthread_t g_th; static volatile int g_status; // 0 chưa chạy, 1 đang chạy, 2 đã thoát, -1 lỗi
 static int g_thValid;
 static void *vmMain(void *p) {
-  (void)p; g_err[0] = 0; g_status = 1;
+  (void)p; g_err[0] = 0; g_status = 1; g_log[0] = 0; g_loglen = 0;
   jvmResetAll(); cpdir = g_sa.dir; g_rmsDir = g_sa.rms; g_frameSink = libSink;
   initRuntime();
   Class *c = loadClass(g_sa.midlet); threadCls = loadClass("java/lang/Thread");
@@ -883,6 +890,7 @@ EXPORT void jvmcore_refresh(void) { midpForceKey(); }
 EXPORT void jvmcore_key(int type, int code) { midpKey(type, code); }
 EXPORT void jvmcore_pointer(int type, int x, int y) { midpPointer(type, x, y); }
 EXPORT int jvmcore_status(void) { return g_status; }
+EXPORT const char *jvmcore_log(void) { return g_log; }
 EXPORT const char *jvmcore_error(void) { return g_err; }
 EXPORT void jvmcore_stop(void) { if (g_thValid) { g_stop = 1; pthread_join(g_th, 0); g_thValid = 0; } g_status = 0; }
 #endif
