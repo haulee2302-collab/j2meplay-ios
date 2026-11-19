@@ -7,9 +7,9 @@ import 'session.dart';
 
 /// Giữ app chạy khi chuyển sang app khác (iOS): phát âm thanh im lặng ở chế độ nền "audio"
 /// trong lúc còn game chạy. Dừng ngay khi không còn game nào.
-class KeepAlive with WidgetsBindingObserver {
-  static final KeepAlive _i = KeepAlive._();
-  KeepAlive._();
+class BgKeep with WidgetsBindingObserver {
+  static final BgKeep _i = BgKeep._();
+  BgKeep._();
 
   /// App đang ở foreground? Khi false, giả lập không vẽ khung hình (iOS cấm dùng GPU nền).
   static bool active = true;

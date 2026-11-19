@@ -10,7 +10,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Api.instance.load();
   await Jp.load();
-  KeepAlive.init();
+  BgKeep.init();
   runApp(const J2mePlayApp());
 }
 

@@ -119,7 +119,7 @@ class EmuSession extends ChangeNotifier {
 
   void _publish() {
     final m = midp;
-    if (m == null || _busy || !KeepAlive.active) return;
+    if (m == null || _busy || !BgKeep.active) return;
     _busy = true;
     final w = m.width, h = m.height, px = m.screen.px;
     final out = Uint8List(w * h * 4);
