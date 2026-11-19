@@ -1,2 +1,4 @@
 jvm
 test/*.class
+test/jpcview
+rms_*.bin

@@ -7,7 +7,7 @@ enum { CP_UTF8 = 1, CP_INT = 3, CP_FLOAT = 4, CP_LONG = 5, CP_DOUBLE = 6, CP_CLA
 
 Obj *g_exc = 0;
 Class *arrCls;
-static const char *cpdir;
+const char *cpdir;
 static Class *classes[2048]; static int nclasses;
 
 static void die(const char *m, const char *a) { fflush(stdout); fprintf(stderr, "LỖI: %s %s\n", m, a ? a : ""); exit(1); }
@@ -30,6 +30,7 @@ int argSlotsOf(const char *d, int *ret) {
 // ---------------- đăng ký native ----------------
 static NativeRow *rows; static int nrows, caprows;
 void regNative(const char *cls, const char *name, const char *desc, int isStatic, NativeFn fn) {
+  for (int i = 0; i < nrows; i++) if (!strcmp(rows[i].cls, cls) && !strcmp(rows[i].name, name) && !strcmp(rows[i].desc, desc)) { rows[i].fn = fn; rows[i].isStatic = isStatic; return; } // đăng ký sau ghi đè đăng ký trước
   if (nrows == caprows) { caprows = caprows ? caprows * 2 : 512; rows = realloc(rows, caprows * sizeof(NativeRow)); }
   rows[nrows++] = (NativeRow){cls, name, desc, isStatic, fn};
 }
@@ -53,6 +54,22 @@ static const BDef bdefs[] = {
   {"java/lang/Character", "java/lang/Object", 1}, {"java/io/PrintStream", "java/lang/Object", 0}, {"java/util/Random", "java/lang/Object", 1},
   {"java/util/Vector", "java/lang/Object", 3}, {"java/util/Stack", "java/util/Vector", 0}, {"java/util/ArrayList", "java/lang/Object", 3},
   {"java/util/Hashtable", "java/lang/Object", 3}, {"java/util/HashMap", "java/lang/Object", 3},
+  {"java/io/EOFException", "java/io/IOException", 0}, {"java/io/UTFDataFormatException", "java/io/IOException", 0}, {"java/util/Arrays", "java/lang/Object", 0},
+  {"java/io/InputStream", "java/lang/Object", 4}, {"java/io/ByteArrayInputStream", "java/io/InputStream", 4}, {"java/io/DataInputStream", "java/io/InputStream", 4},
+  {"java/io/OutputStream", "java/lang/Object", 3}, {"java/io/ByteArrayOutputStream", "java/io/OutputStream", 3}, {"java/io/DataOutputStream", "java/io/OutputStream", 3},
+  {"javax/microedition/midlet/MIDlet", "java/lang/Object", 2}, {"javax/microedition/lcdui/Displayable", "java/lang/Object", 4}, {"javax/microedition/lcdui/Canvas", "javax/microedition/lcdui/Displayable", 4},
+  {"javax/microedition/lcdui/game/GameCanvas", "javax/microedition/lcdui/Canvas", 4}, {"javax/microedition/lcdui/Graphics", "java/lang/Object", 12}, {"javax/microedition/lcdui/Image", "java/lang/Object", 6},
+  {"javax/microedition/lcdui/Font", "java/lang/Object", 3}, {"javax/microedition/lcdui/Command", "java/lang/Object", 3}, {"javax/microedition/lcdui/Display", "java/lang/Object", 2},
+  {"javax/microedition/rms/RecordStore", "java/lang/Object", 3}, {"javax/microedition/rms/RecordEnumeration", "java/lang/Object", 3},
+  {"javax/microedition/rms/RecordStoreException", "java/lang/Exception", 0}, {"javax/microedition/rms/RecordStoreNotFoundException", "javax/microedition/rms/RecordStoreException", 0},
+  {"javax/microedition/rms/RecordStoreNotOpenException", "javax/microedition/rms/RecordStoreException", 0}, {"javax/microedition/rms/InvalidRecordIDException", "javax/microedition/rms/RecordStoreException", 0},
+  {"javax/microedition/rms/RecordStoreFullException", "javax/microedition/rms/RecordStoreException", 0},
+  {"java/lang/Runtime", "java/lang/Object", 0}, {"java/lang/ClassNotFoundException", "java/lang/Exception", 0},
+  {"javax/microedition/lcdui/List", "javax/microedition/lcdui/Displayable", 5}, {"javax/microedition/lcdui/Alert", "javax/microedition/lcdui/Displayable", 4},
+  {"javax/microedition/lcdui/Form", "javax/microedition/lcdui/Displayable", 4}, {"javax/microedition/lcdui/TextBox", "javax/microedition/lcdui/Displayable", 4},
+  {"javax/microedition/lcdui/Item", "java/lang/Object", 2}, {"javax/microedition/lcdui/ChoiceGroup", "javax/microedition/lcdui/Item", 5}, {"javax/microedition/lcdui/TextField", "javax/microedition/lcdui/Item", 4},
+  {"javax/microedition/lcdui/StringItem", "javax/microedition/lcdui/Item", 2}, {"javax/microedition/lcdui/Gauge", "javax/microedition/lcdui/Item", 2}, {"javax/microedition/lcdui/AlertType", "java/lang/Object", 0},
+  {"com/nokia/mid/ui/DeviceControl", "java/lang/Object", 0},
 };
 
 static void attachNatives(Class *c) {
@@ -191,7 +208,9 @@ void jprintStr(Obj *s, FILE *f) {
     else { fputc(0xE0 | (c >> 12), f); fputc(0x80 | ((c >> 6) & 63), f); fputc(0x80 | (c & 63), f); }
   }
 }
+static void traceHere(const char *what, const char *msg);
 void throwNew(const char *cls, const char *msg) {
+  traceHere(cls, msg);
   Obj *e = newObj(loadClass(cls)); if (msg) e->f[0].a = newStr(msg); g_exc = e;
 }
 
@@ -219,6 +238,17 @@ typedef struct Thread {
   struct Thread *joinTarget; int daemon, interrupted, pend, id;
 } Thread;
 static Thread *curT; static Thread *threads[256]; static int nthreads;
+static int g_trace = -1;
+// JVM_TRACE=1: in chuỗi phương thức đang chạy mỗi khi ném ngoại lệ từ native (để dò lỗi)
+static void traceHere(const char *what, const char *msg) {
+  if (g_trace < 0) g_trace = getenv("JVM_TRACE") != 0;
+  if (!g_trace || !curT) return;
+  fprintf(stderr, "[throw %s: %s]", what, msg ? msg : "");
+  for (int i = curT->nfs - 1, k = 0; i >= 0 && k < 6; i--, k++) { Method *m = curT->fs[i].m; fprintf(stderr, " <- %s.%s%s", m->cls->name, m->name, m->desc); }
+  fprintf(stderr, "\n");
+}
+
+
 #define frames (curT->fs)
 #define nf (curT->nfs)
 #define gTop (curT->top)
@@ -335,6 +365,7 @@ static int interp(int base) {
     int w = *pc == 18; int idx = w ? pc[1] : r16(pc + 1); Cp *e = &cc->cp[idx];
     if (e->tag == CP_INT) PUSHI(e->u.i); else if (e->tag == CP_FLOAT) sp++->f = e->u.f;
     else if (e->tag == CP_STRING) { if (!e->cache) e->cache = newStr(cc->cp[e->u.r.a].u.s); sp++->a = e->cache; }
+    else if (e->tag == CP_CLASS) { if (!e->cache) { Obj *co = newObj(loadClass("java/lang/Class")); co->f[0].a = loadClass(cc->cp[e->u.r.a].u.s); e->cache = co; } sp++->a = e->cache; }
     else sp++->a = 0;
     pc += w ? 2 : 3; NEXT; }
   L_ldc2_w: { Cp *e = &cc->cp[r16(pc + 1)]; if (e->tag == CP_LONG) sp->l = e->u.l; else sp->d = e->u.d; sp += 2; pc += 3; NEXT; }
@@ -590,7 +621,7 @@ static int monEnter(void *o, int force) {
 static void monExit(void *o) { Mon *m = monFind(o, 0); if (m && m->owner == curT && --m->count <= 0) { m->owner = 0; m->count = 0; } }
 
 // ---------------- luồng ----------------
-static int64_t nowMs(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000; }
+int64_t nowMs(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000; }
 #define STACKSLOTS (256 * 1024)
 static Thread *newThread(Method *entry, Slot *args, int nargs, Obj *jobj) {
   Thread *t = calloc(1, sizeof *t);
@@ -610,9 +641,11 @@ static void printUncaught(Thread *t) {
 }
 
 // Chạy bộ điều phối cho đến khi [until] xong (nếu có) hoặc hết luồng không-daemon hoặc quá hạn.
+void (*g_idle)(void);
 static void schedule(Thread *until, int64_t deadline) {
   int last = -1;
   for (;;) {
+    if (g_idle) g_idle();
     if (until && until->state == TS_DONE) return;
     int64_t now = nowMs(); if (deadline && now >= deadline) return;
     int alive = 0; Thread *pick = 0; int64_t earliest = 0;
@@ -636,12 +669,21 @@ static void schedule(Thread *until, int64_t deadline) {
     if (!pick) {
       if (earliest) { int64_t d = earliest - nowMs(); if (deadline && earliest > deadline) d = deadline - nowMs(); if (d > 0) { struct timespec ts = {d / 1000, (d % 1000) * 1000000}; nanosleep(&ts, 0); } continue; }
       if (until) return; // kẹt (deadlock)
+      if (g_idle) { struct timespec ts = {0, 2000000}; nanosleep(&ts, 0); continue; } // MIDlet: chờ sự kiện
       fflush(stdout); fprintf(stderr, "[deadlock: mọi luồng đều chờ]\n"); return;
     }
     curT = pick; g_budget = BUDGET;
     int r = interp(0);
     if (r == 0 || pick->nfs == 0) { if (g_exc) printUncaught(pick); pick->state = TS_DONE; }
   }
+}
+
+// Luồng sự kiện dùng lại được (paint, phím, ...): khởi chạy một phương thức trên luồng [t] đã xong.
+void *evThreadNew(void) { Method dummy; (void)dummy; Thread *t = calloc(1, sizeof *t); t->fs = calloc(MAXF + 1, sizeof(Frame)); t->arena = calloc(STACKSLOTS, sizeof(Slot)); t->top = t->arena; t->state = TS_DONE; t->daemon = 1; t->id = nthreads; if (nthreads >= 256) die("quá nhiều luồng", 0); threads[nthreads++] = t; return t; }
+int evThreadBusy(void *p) { return ((Thread *)p)->state != TS_DONE; }
+void evThreadRun(void *p, Method *entry, Slot *args, int nargs) {
+  Thread *t = p; Frame *f = &t->fs[0]; f->m = entry; f->loc = t->arena; f->sp = t->arena + entry->maxLocals; f->pc = entry->code; f->lock = 0;
+  memcpy(t->arena, args, nargs * sizeof(Slot)); t->nfs = 1; t->top = t->arena; t->state = TS_RUN; t->interrupted = 0; t->pend = 0;
 }
 
 // ---- native cho Thread / Object.wait,notify ----
@@ -700,7 +742,7 @@ static void installThreadNatives(void) {
 
 // ---------------- chạy ----------------
 static void initRuntime(void) {
-  installNatives(); installThreadNatives();
+  installNatives(); installThreadNatives(); installIO(); installMidp(); installMisc();
   arrCls = calloc(1, sizeof(Class)); arrCls->name = "[array"; arrCls->initState = 2; arrCls->builtin = 1;
   interp(0); // khởi tạo bảng nhảy
 }
@@ -722,6 +764,16 @@ static void initClassNow(Class *k, int64_t deadline) {
   k->initState = 2;
 }
 
+extern void (*g_frameSink)(const uint8_t *, int, int);
+extern int g_frames; extern void midpKey(int, int);
+static FILE *dumpF;
+static void dumpSink(const uint8_t *d, int n, int key) { (void)key; if (dumpF) { fwrite(&n, 4, 1, dumpF); fwrite(d, 1, n, dumpF); } }
+static int64_t keyT0; static char *keySpec; static void (*realIdle)(void);
+static void keyPump(void) { // KEYS="tms:code,..." phát phím theo thời gian (kiểm thử)
+  static int idx; if (!keySpec) return; char *p = keySpec; for (int i = 0; i < idx && p; i++) { p = strchr(p, ','); if (p) p++; } if (!p || !*p) return;
+  int ms, code; if (sscanf(p, "%d:%d", &ms, &code) == 2 && nowMs() - keyT0 >= ms) { midpKey(0, code); midpKey(1, code); idx++; }
+}
+static void idleWrap(void) { keyPump(); if (realIdle) realIdle(); }
 int main(int argc, char **argv) {
   const char *mode = "main"; int ai = 1; int secs = 5;
   if (argc > 1 && !strcmp(argv[1], "-midlet")) { mode = "midlet"; ai = 2; }
@@ -741,6 +793,8 @@ int main(int argc, char **argv) {
     fflush(stdout);
     return 0;
   } else {
+    const char *df = getenv("JPC_DUMP"); if (df) { dumpF = fopen(df, "wb"); g_frameSink = dumpSink; }
+    keySpec = getenv("KEYS"); keyT0 = nowMs(); if (keySpec) { realIdle = g_idle; g_idle = idleWrap; }
     initClassNow(c, deadline);
     Obj *mid = newObj(c);
     Method *ctor = findMethod(c, "<init>", "()V"); Slot a1; a1.a = mid;
@@ -748,6 +802,6 @@ int main(int argc, char **argv) {
     Method *sa = findMethod(c, "startApp", "()V");
     if (sa) { Thread *t = newThread(sa, &a1, 1, 0); curT = t; schedule(t, deadline); }
     schedule(0, deadline); // để các luồng game chạy tới hạn
-    fflush(stdout); return 0;
+    fflush(stdout); fprintf(stderr, "[midlet] số khung đã phát: %d\n", g_frames); if (dumpF) fclose(dumpF); return 0;
   }
 }

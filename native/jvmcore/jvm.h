@@ -46,4 +46,14 @@ void installNatives(void);
 typedef struct { const char *cls, *name, *desc; int isStatic; NativeFn fn; } NativeRow;
 void regNative(const char *cls, const char *name, const char *desc, int isStatic, NativeFn fn);
 int argSlotsOf(const char *d, int *ret);
+extern const char *cpdir;
+int64_t nowMs(void);
+extern void (*g_idle)(void);
+void *evThreadNew(void);
+int evThreadBusy(void *t);
+void evThreadRun(void *t, Method *entry, Slot *args, int nargs);
+void installIO(void);
+void installMidp(void);
+void installMisc(void);
+#define ARRB(o) ((int8_t *)((Arr *)(o))->d)
 #endif
