@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'kbd.dart';
 import 'screens_ui.dart';
+import 'pip.dart';
 import 'session.dart';
 import 'store.dart';
 
@@ -83,12 +84,34 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
     super.initState();
     _inst = widget.inst;
     s = EmuRuntime.open(_inst);
+    Pip.focus(_inst.id);
     s.addListener(_t);
     s.frame.addListener(_t);
     SharedPrefsLite.load().then((v) { if (mounted) setState(() => showPad = v); });
   }
 
   void _t() { if (mounted) setState(() {}); }
+
+  Future<void> _togglePip() async {
+    setState(() => menu = false);
+    final on = !Pip.enabled;
+    final ok = await Pip.set(on, _inst.id);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thiết bị không hỗ trợ hình trong hình (cần iOS 15 trở lên)')));
+      return;
+    }
+    if (on) {
+      s.resume();
+      final started = await Pip.startNow();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(started ? 'Đã bật hình trong hình' : 'Đã bật. Rời app sẽ tự vào hình trong hình')));
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã tắt hình trong hình')));
+    }
+    setState(() {});
+  }
 
   @override
   void dispose() {
@@ -203,6 +226,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(color: Jp.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Jp.line), boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))]),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      _toolItem(Pip.enabled ? 'Tắt hình trong hình' : 'Bật hình trong hình', JpIcons.screen, _togglePip),
                       _toolItem('Khởi động lại', JpIcons.restart2, _restart),
                       _toolItem('Cấu hình', JpIcons.tune, _config),
                       _toolItem('Tắt giả lập', JpIcons.power, () { EmuRuntime.close(inst.id); LocalFloats.close(inst.id); Navigator.pop(context); }, danger: true),

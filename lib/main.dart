@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'theme.dart';
 import 'emu/keepalive.dart';
+import 'emu/pip.dart';
 import 'screens/login.dart';
 import 'screens/shell.dart';
 import 'screens/floating.dart';
@@ -11,6 +12,7 @@ Future<void> main() async {
   await Api.instance.load();
   await Jp.load();
   BgKeep.init();
+  Pip.load();
   runApp(const J2mePlayApp());
 }
 

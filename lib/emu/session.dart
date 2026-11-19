@@ -13,6 +13,7 @@ import '../jvm/vm.dart';
 import 'glyphs.dart';
 import 'net.dart';
 import 'keepalive.dart';
+import 'pip.dart';
 import 'store.dart';
 
 /// Phím ảo gửi vào game local (nối với Canvas MIDP ở giai đoạn sau).
@@ -119,8 +120,9 @@ class EmuSession extends ChangeNotifier {
 
   void _publish() {
     final m = midp;
-    if (m == null || _busy || !BgKeep.active) return;
-    _busy = true;
+    if (m == null || _busy) return;
+    final pip = Pip.wants(inst.id);
+    if (!BgKeep.active && !pip) return;
     final w = m.width, h = m.height, px = m.screen.px;
     final out = Uint8List(w * h * 4);
     for (var i = 0, o = 0; i < px.length; i++, o += 4) {
@@ -130,6 +132,9 @@ class EmuSession extends ChangeNotifier {
       out[o + 2] = c & 255;
       out[o + 3] = 255;
     }
+    if (pip) Pip.send(out, w, h);
+    if (!BgKeep.active) return;
+    _busy = true;
     ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888, (img) {
       _busy = false;
       final old = frame.value;
