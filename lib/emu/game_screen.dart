@@ -250,6 +250,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                       _toolItem(Pip.enabled ? 'Tắt hình trong hình' : 'Bật hình trong hình', JpIcons.screen, _togglePip),
                       _toolItem('Khởi động lại', JpIcons.restart2, _restart),
                       _toolItem(JvmCore.enabled ? 'Tắt lõi C (thử nghiệm)' : 'Bật lõi C (thử nghiệm)', JpIcons.tune, _toggleCore),
+                      _toolItem(s.noDraw ? 'Bật vẽ hình' : 'Vẽ giả (chỉ chạy logic)', JpIcons.screen, () => s.setNoDraw(!s.noDraw)),
                       _toolItem('Cấu hình', JpIcons.tune, _config),
                       _toolItem('Tắt giả lập', JpIcons.power, () { EmuRuntime.close(inst.id); LocalFloats.close(inst.id); Navigator.pop(context); }, danger: true),
                     ]),

@@ -40,6 +40,14 @@ class EmuSession extends ChangeNotifier {
   Timer? _timer, _rmsT;
   String status = 'Xin chờ';
   bool error = false, ready = false, foreground = true, _busy = false;
+  /// Chế độ "vẽ giả": game vẫn chạy logic nhưng không dựng hình (tiết kiệm máy cho game tự đánh, treo máy).
+  bool noDraw = false;
+  void setNoDraw(bool v) {
+    noDraw = v;
+    if (!v && ready) resume();
+    notifyListeners();
+  }
+
   final List<String> log = [];
   final ValueNotifier<ui.Image?> frame = ValueNotifier(null);
   // Màn hình List/Form/TextBox/Alert do lõi C mô tả (null = đang ở màn hình vẽ bằng khung hình).
@@ -207,7 +215,7 @@ class EmuSession extends ChangeNotifier {
     if (core == null || r == null || _pumping) return;
     _pumping = true;
     try {
-      final show = (BgKeep.active && foreground) || Pip.wants(inst.id);
+      final show = !noDraw && ((BgKeep.active && foreground) || Pip.wants(inst.id));
       var any = false;
       for (var i = 0; i < 48; i++) {
         final d = core.poll();
@@ -320,7 +328,7 @@ class EmuSession extends ChangeNotifier {
     try {
       final fb = r.fb;
       if (fb != null && Pip.wants(inst.id)) Pip.send(Uint8List.fromList(fb.buffer.asUint8List()), r.width, r.height);
-      if (!BgKeep.active || !foreground) return;
+      if (noDraw || !BgKeep.active || !foreground) return;
       final img = await r.snapshot();
       if (img == null) return;
       final old = frame.value;
@@ -349,6 +357,7 @@ class EmuSession extends ChangeNotifier {
   void _publish() {
     final m = midp;
     if (m == null || _busy) return;
+    if (noDraw) return;
     final pip = Pip.wants(inst.id);
     if (!BgKeep.active && !pip) return;
     final w = m.width, h = m.height, px = m.screen.px;
