@@ -92,12 +92,28 @@ class _Res {
   final int w, h;
   Uint32List px; // RGBA byte order == little-endian 0xAABBGGRR
   _Res(this.w, this.h, this.px);
+  bool? _opaque;
+
+  /// Ảnh không có điểm trong suốt: chép từng hàng một lần thay vì pha từng điểm.
+  bool get isOpaque {
+    var o = _opaque;
+    if (o != null) return o;
+    o = true;
+    for (var i = 0; i < px.length; i++) {
+      if (px[i] >>> 24 != 255) {
+        o = false;
+        break;
+      }
+    }
+    return _opaque = o;
+  }
 }
 
 class _TextSprite {
   final int w, h, baseline;
   final Uint8List alpha;
-  _TextSprite(this.w, this.h, this.baseline, this.alpha);
+  final double advance;
+  _TextSprite(this.w, this.h, this.baseline, this.alpha, this.advance);
 }
 
 /// Bộ vẽ phần mềm: khung hình là một mảng điểm ảnh RGBA (Uint32 little-endian), nên chép thẳng ra ui.Image được.
@@ -299,17 +315,26 @@ class JpcRenderer {
     final f = fb!;
     final cl = _cl, ct = _ct, cr = _cr, cb = _cb;
     if (tr == 0) {
+      final i0 = math.max(math.max(0, cl - dx), -sx), i1 = math.min(math.min(w, cr - dx), res.w - sx);
+      if (i1 <= i0) return;
+      final n = i1 - i0, opaque = res.isOpaque, px = res.px;
       for (var j = 0; j < h; j++) {
         final y = dy + j;
         final srow = sy + j;
         if (y < ct || y >= cb || srow < 0 || srow >= res.h) continue;
-        for (var i = 0; i < w; i++) {
-          final x = dx + i;
-          final scol = sx + i;
-          if (x < cl || x >= cr || scol < 0 || scol >= res.w) continue;
-          final s = res.px[srow * res.w + scol];
-          final idx = y * width + x;
-          f[idx] = _blend(f[idx], s);
+        final sb = srow * res.w + sx + i0, db = y * width + dx + i0;
+        if (opaque) {
+          f.setRange(db, db + n, px, sb);
+        } else {
+          for (var q = 0; q < n; q++) {
+            final sp = px[sb + q];
+            final a = sp >>> 24;
+            if (a == 255) {
+              f[db + q] = sp;
+            } else if (a != 0) {
+              f[db + q] = _blend(f[db + q], sp);
+            }
+          }
         }
       }
       return;
@@ -385,7 +410,7 @@ class JpcRenderer {
     }
   }
 
-  // ---- chữ: dựng mặt nạ bằng dart:ui rồi tô màu khi vẽ ----
+  // ---- chữ: dựng mặt nạ từng ký tự bằng dart:ui (lưu lại để dùng mãi), ghép lại khi vẽ ----
   Future<_TextSprite> _sprite(String text, int face, int style, int size) async {
     final key = '$face|$style|$size|$text';
     final cached = _sprites[key];
@@ -417,30 +442,40 @@ class JpcRenderer {
     if (bytes != null) {
       for (var i = 0; i < w * h; i++) alpha[i] = bytes.getUint8(i * 4 + 3);
     }
-    if (_sprites.length > 600) _sprites.clear();
-    return _sprites[key] = _TextSprite(w, h, baseline, alpha);
+    if (_sprites.length > 3000) _sprites.clear();
+    return _sprites[key] = _TextSprite(w, h, baseline, alpha, tp.width);
+  }
+
+  void _blitSprite(_TextSprite sp, int ox, int oy, int r, int g, int b) {
+    final f = fb!;
+    final j0 = math.max(0, _ct - oy), j1 = math.min(sp.h, _cb - oy);
+    final i0 = math.max(0, _cl - ox), i1 = math.min(sp.w, _cr - ox);
+    if (j1 <= j0 || i1 <= i0) return;
+    final rgb = (b << 16) | (g << 8) | r, al = sp.alpha;
+    for (var j = j0; j < j1; j++) {
+      final row = (oy + j) * width + ox, srow = j * sp.w;
+      for (var i = i0; i < i1; i++) {
+        final a = al[srow + i];
+        if (a == 0) continue;
+        f[row + i] = a == 255 ? (0xFF000000 | rgb) : _blend(f[row + i], (a << 24) | rgb);
+      }
+    }
   }
 
   Future<void> _drawText(String value, int x, int baseline, int face, int style, int size) async {
     if (_clipR <= _clipL || _clipB <= _clipT || value.isEmpty) return;
-    final sp = await _sprite(value, face, style, math.max(1, size));
-    final f = fb!;
+    final sz = math.max(1, size);
     final r = _color & 255, g = (_color >> 8) & 255, b = (_color >> 16) & 255;
-    final ox = x - 2, oy = baseline - sp.baseline;
-    for (var j = 0; j < sp.h; j++) {
-      final yy = oy + j;
-      if (yy < _ct || yy >= _cb) continue;
-      for (var i = 0; i < sp.w; i++) {
-        final a = sp.alpha[j * sp.w + i];
-        if (a == 0) continue;
-        final xx = ox + i;
-        if (xx < _cl || xx >= _cr) continue;
-        f[yy * width + xx] = _blend(f[yy * width + xx], (a << 24) | (b << 16) | (g << 8) | r);
-      }
+    var pen = x.toDouble();
+    for (final rune in value.runes) {
+      final ch = String.fromCharCode(rune);
+      final key = '$face|$style|$sz|$ch';
+      final sp = _sprites[key] ?? await _sprite(ch, face, style, sz);
+      if (rune != 32 && rune != 9) _blitSprite(sp, pen.round() - 2, baseline - sp.baseline, r, g, b);
+      pen += sp.advance;
     }
     if (style & 4 != 0) {
-      final tw = sp.w - 4;
-      _fillRect(x, baseline + 1, tw, 1);
+      _fillRect(x, baseline + 1, (pen - x).round(), 1);
     }
   }
 

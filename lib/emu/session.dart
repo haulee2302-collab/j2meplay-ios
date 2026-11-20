@@ -207,7 +207,7 @@ class EmuSession extends ChangeNotifier {
     if (core == null || r == null || _pumping) return;
     _pumping = true;
     try {
-      final show = BgKeep.active || Pip.wants(inst.id);
+      final show = (BgKeep.active && foreground) || Pip.wants(inst.id);
       var any = false;
       for (var i = 0; i < 48; i++) {
         final d = core.poll();
@@ -320,7 +320,7 @@ class EmuSession extends ChangeNotifier {
     try {
       final fb = r.fb;
       if (fb != null && Pip.wants(inst.id)) Pip.send(Uint8List.fromList(fb.buffer.asUint8List()), r.width, r.height);
-      if (!BgKeep.active) return;
+      if (!BgKeep.active || !foreground) return;
       final img = await r.snapshot();
       if (img == null) return;
       final old = frame.value;
@@ -441,7 +441,9 @@ class EmuRuntime {
       s.start();
       changed.value++;
     }
+    final wasHidden = !s.foreground;
     s.foreground = true;
+    if (wasHidden && s.ready) s.resume(); // quay lại game đang chạy ẩn: vẽ lại toàn bộ khung
     return s;
   }
 
