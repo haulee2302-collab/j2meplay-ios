@@ -218,8 +218,11 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                               valueListenable: s.screen,
                               builder: (_, m, __) => m == null ? const SizedBox.shrink() : CoreScreenView(data: m, act: s.uiAct),
                             ),
-                            if (s.frame.value == null || s.error)
-                              Container(
+                            ValueListenableBuilder<Map<String, dynamic>?>(
+                              valueListenable: s.screen,
+                              builder: (_, m, __) => (m != null && !s.error) || (s.frame.value != null && !s.error)
+                                  ? const SizedBox.shrink()
+                                  : Container(
                                 color: Jp.surface,
                                 alignment: Alignment.center,
                                 padding: const EdgeInsets.all(20),
@@ -228,6 +231,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                                   Text(s.status, textAlign: TextAlign.center, style: TextStyle(color: s.error ? Jp.danger : const Color(0xFF1769D9), fontSize: 13, fontWeight: FontWeight.w600)),
                                 ]),
                               ),
+                            ),
                           ]);
                         }),
                       ),
