@@ -284,6 +284,19 @@ static void h_size(Slot *a) { a[0].i = ((Obj *)a[0].a)->f[2].i; }
 static void h_isEmpty(Slot *a) { a[0].i = ((Obj *)a[0].a)->f[2].i == 0; }
 static void h_clear(Slot *a) { Obj *o = a[0].a; for (int i = 0; i < o->f[1].i; i++) HT(o)[i] = 0; o->f[2].i = 0; }
 
+// ---- Enumeration (ảnh chụp mảng phần tử) ----
+static Obj *mkEnum(void **items, int n) { Obj *e = newObj(loadClass("java/util/EnumImpl")); e->f[0].a = items; e->f[1].i = n; e->f[2].i = 0; return e; }
+static void en_has(Slot *a) { Obj *o = a[0].a; a[0].i = o->f[2].i < o->f[1].i; }
+static void en_next(Slot *a) { Obj *o = a[0].a; if (o->f[2].i >= o->f[1].i) { throwNew("java/util/NoSuchElementException", 0); return; } a[0].a = ((void **)o->f[0].a)[o->f[2].i++]; }
+static void v_elements(Slot *a) { Obj *o = a[0].a; int n = o->f[1].i; void **c = calloc(n ? n : 1, sizeof(void *)); memcpy(c, VD(o), n * sizeof(void *)); a[0].a = mkEnum(c, n); }
+static void hEnum(Slot *a, int keys) {
+  Obj *o = a[0].a; int n = o->f[2].i, k = 0; void **c = calloc(n ? n : 1, sizeof(void *));
+  for (int i = 0; i < o->f[1].i; i++) for (Ent *e = HT(o)[i]; e && k < n; e = e->next) c[k++] = keys ? e->k : e->v;
+  a[0].a = mkEnum(c, k);
+}
+static void h_keys(Slot *a) { hEnum(a, 1); }
+static void h_elements(Slot *a) { hEnum(a, 0); }
+
 // ---- Random (đúng thuật toán java.util.Random) ----
 static void rnd_seed(Obj *o, int64_t s) { o->f[0].l = (s ^ 0x5DEECE66DLL) & ((1LL << 48) - 1); }
 static int rnd_next(Obj *o, int bits) { o->f[0].l = (int64_t)(((uint64_t)o->f[0].l * 0x5DEECE66DULL + 0xBULL) & ((1ULL << 48) - 1)); return (int)(o->f[0].l >> (48 - bits)); }
@@ -376,6 +389,9 @@ void installNatives(void) {
     NI(c, "<init>", "()V", h_init); NI(c, "<init>", "(I)V", h_initI); NI(c, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", h_put); NI(c, "get", "(Ljava/lang/Object;)Ljava/lang/Object;", h_get);
     NI(c, "containsKey", "(Ljava/lang/Object;)Z", h_containsKey); NI(c, "remove", "(Ljava/lang/Object;)Ljava/lang/Object;", h_remove); NI(c, "size", "()I", h_size); NI(c, "isEmpty", "()Z", h_isEmpty); NI(c, "clear", "()V", h_clear);
   }
+  NI("java/util/Vector", "elements", "()Ljava/util/Enumeration;", v_elements);
+  NI("java/util/Hashtable", "keys", "()Ljava/util/Enumeration;", h_keys); NI("java/util/Hashtable", "elements", "()Ljava/util/Enumeration;", h_elements);
+  NI("java/util/EnumImpl", "hasMoreElements", "()Z", en_has); NI("java/util/EnumImpl", "nextElement", "()Ljava/lang/Object;", en_next);
   const char *R = "java/util/Random";
   NI(R, "<init>", "()V", rn_init); NI(R, "<init>", "(J)V", rn_initJ); NI(R, "setSeed", "(J)V", rn_setSeed); NI(R, "nextInt", "()I", rn_nextInt); NI(R, "nextInt", "(I)I", rn_nextIntN);
   NI(R, "nextLong", "()J", rn_nextLong); NI(R, "nextBoolean", "()Z", rn_nextBoolean);

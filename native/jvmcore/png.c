@@ -1,4 +1,5 @@
 // Bộ giải nén PNG nhỏ (inflate + bỏ lọc), đủ cho ảnh J2ME. Trả về ARGB (0xAARRGGBB).
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,7 +93,9 @@ static uint32_t be32(const uint8_t *p) { return ((uint32_t)p[0] << 24) | (p[1] <
 static int paeth(int a, int b, int c) { int p = a + b - c, pa = abs(p - a), pb = abs(p - b), pc = abs(p - c); return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c); }
 
 // Trả về mảng ARGB (malloc) và kích thước; NULL nếu không phải PNG hỗ trợ.
+static uint32_t *jpgDecode(const uint8_t *d, size_t n, int *ow, int *oh);
 uint32_t *pngDecode(const uint8_t *d, size_t n, int *ow, int *oh) {
+  if (n > 4 && d[0] == 0xFF && d[1] == 0xD8) return jpgDecode(d, n, ow, oh);
   if (n < 33 || memcmp(d, "\x89PNG\r\n\x1a\n", 8)) return 0;
   size_t p = 8; int w = 0, h = 0, depth = 0, ct = 0, il = 0;
   uint8_t pal[256 * 3]; int npal = 0; uint8_t trns[256]; int ntrns = 0; int tkey = -1;
@@ -141,4 +144,89 @@ uint32_t *pngDecode(const uint8_t *d, size_t n, int *ow, int *oh) {
     uint8_t *t = prev; prev = cur; cur = t;
   }
   free(cur); free(prev); free(raw); *ow = w; *oh = h; return out;
+}
+
+// ---- JPEG baseline (tuần tự, Huffman, có restart, lấy mẫu con) ----
+typedef struct { uint8_t bits[17]; uint8_t val[256]; int mincode[17], maxcode[18], valptr[17]; int ok; } JHuff;
+typedef struct { const uint8_t *d; size_t n, p; uint32_t buf; int cnt; int eof; } JBits;
+static const uint8_t jzz[64] = {0,1,8,16,9,2,3,10,17,24,32,25,18,11,4,5,12,19,26,33,40,48,41,34,27,20,13,6,7,14,21,28,35,42,49,56,57,50,43,36,29,22,15,23,30,37,44,51,58,59,52,45,38,31,39,46,53,60,61,54,47,55,62,63};
+static void jbuild(JHuff *h) {
+  int code = 0, k = 0;
+  for (int l = 1; l <= 16; l++) { h->valptr[l] = k; h->mincode[l] = code; code += h->bits[l]; k += h->bits[l]; h->maxcode[l] = h->bits[l] ? code - 1 : -1; code <<= 1; }
+  h->maxcode[17] = 0x7fffffff; h->ok = 1;
+}
+static int jbit(JBits *b) {
+  if (!b->cnt) {
+    int c = 0;
+    if (b->p < b->n) { c = b->d[b->p++]; if (c == 0xFF) { int c2 = b->p < b->n ? b->d[b->p] : 0; if (c2 == 0) b->p++; else { b->p--; c = 0; b->eof = 1; } } } else b->eof = 1;
+    b->buf = c; b->cnt = 8;
+  }
+  b->cnt--; return (b->buf >> b->cnt) & 1;
+}
+static int jrecv(JBits *b, int n) { int v = 0; while (n--) v = (v << 1) | jbit(b); return v; }
+static int jext(int v, int n) { return n && v < (1 << (n - 1)) ? v - (1 << n) + 1 : v; }
+static int jdec(JBits *b, JHuff *h) {
+  int code = 0;
+  for (int l = 1; l <= 16; l++) { code = (code << 1) | jbit(b); if (h->maxcode[l] >= 0 && code <= h->maxcode[l] && code >= h->mincode[l]) return h->val[h->valptr[l] + code - h->mincode[l]]; }
+  return -1;
+}
+static void jidct(const int *in, uint8_t *out, int stride) {
+  float tmp[64];
+  static float c[8][8]; static int init;
+  if (!init) { for (int u = 0; u < 8; u++) for (int x = 0; x < 8; x++) c[u][x] = (u ? 1.0f : 0.70710678f) * cosf((2 * x + 1) * u * 3.14159265f / 16) * 0.5f; init = 1; }
+  for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) { float s = 0; for (int u = 0; u < 8; u++) s += c[u][x] * in[y * 8 + u]; tmp[y * 8 + x] = s; }
+  for (int x = 0; x < 8; x++) for (int y = 0; y < 8; y++) { float s = 0; for (int v = 0; v < 8; v++) s += c[v][y] * tmp[v * 8 + x]; int r = (int)(s + 128.5f); out[y * stride + x] = r < 0 ? 0 : r > 255 ? 255 : r; }
+}
+static uint32_t *jpgDecode(const uint8_t *d, size_t n, int *ow, int *oh) {
+  JHuff hdc[4], hac[4]; memset(hdc, 0, sizeof hdc); memset(hac, 0, sizeof hac);
+  int qt[4][64]; memset(qt, 0, sizeof qt);
+  int w = 0, h = 0, nc = 0, ri = 0; int cid[4] = {0}, chs[4] = {0}, cvs[4] = {0}, cq[4] = {0}, td[4] = {0}, ta[4] = {0};
+  size_t p = 2;
+  while (p + 4 <= n) {
+    if (d[p] != 0xFF) { p++; continue; }
+    int m = d[p + 1]; if (m == 0xFF) { p++; continue; }
+    if (m == 0xD8 || (m >= 0xD0 && m <= 0xD7) || m == 0x01) { p += 2; continue; }
+    int len = (d[p + 2] << 8) | d[p + 3]; const uint8_t *s = d + p + 4; size_t end = p + 2 + len; if (end > n) return 0;
+    if (m == 0xDB) { const uint8_t *q = s; while (q < d + end) { int pq = q[0] >> 4, t = q[0] & 15; q++; if (t > 3) return 0; for (int i = 0; i < 64; i++) { qt[t][jzz[i]] = pq ? (q[0] << 8) | q[1] : q[0]; q += pq ? 2 : 1; } } }
+    else if (m == 0xC4) { const uint8_t *q = s; while (q + 17 <= d + end) { int tc = q[0] >> 4, t = q[0] & 15; q++; if (t > 3) return 0; JHuff *H = tc ? &hac[t] : &hdc[t]; int tot = 0; H->bits[0] = 0; for (int i = 1; i <= 16; i++) { H->bits[i] = q[i - 1]; tot += q[i - 1]; } q += 16; if (tot > 256) return 0; memcpy(H->val, q, tot); q += tot; jbuild(H); } }
+    else if (m == 0xC0 || m == 0xC1) { if (s[0] != 8) return 0; h = (s[1] << 8) | s[2]; w = (s[3] << 8) | s[4]; nc = s[5]; if (nc != 1 && nc != 3) return 0; for (int i = 0; i < nc; i++) { cid[i] = s[6 + i * 3]; chs[i] = s[7 + i * 3] >> 4; cvs[i] = s[7 + i * 3] & 15; cq[i] = s[8 + i * 3] & 3; if (!chs[i] || !cvs[i] || chs[i] > 4 || cvs[i] > 4) return 0; } }
+    else if (m == 0xC2 || (m >= 0xC3 && m <= 0xCF && m != 0xC4 && m != 0xC8 && m != 0xCC)) return 0; // progressive/lossless/arith: chưa hỗ trợ
+    else if (m == 0xDD) ri = (s[0] << 8) | s[1];
+    else if (m == 0xDA) {
+      if (!w || !h || w > 4096 || h > 4096 || !nc) return 0;
+      int ns = s[0]; if (ns != nc) return 0;
+      for (int i = 0; i < ns; i++) { int id = s[1 + i * 2], t = s[2 + i * 2]; int k; for (k = 0; k < nc; k++) if (cid[k] == id) break; if (k == nc) return 0; td[k] = (t >> 4) & 3; ta[k] = t & 3; }
+      int hmax = 1, vmax = 1; for (int i = 0; i < nc; i++) { if (chs[i] > hmax) hmax = chs[i]; if (cvs[i] > vmax) vmax = cvs[i]; }
+      int mw = 8 * hmax, mh = 8 * vmax, mx = (w + mw - 1) / mw, my = (h + mh - 1) / mh;
+      uint8_t *pl[4] = {0}; int pw[4], ph[4];
+      for (int i = 0; i < nc; i++) { pw[i] = mx * chs[i] * 8; ph[i] = my * cvs[i] * 8; pl[i] = malloc((size_t)pw[i] * ph[i]); if (!pl[i]) return 0; }
+      JBits b = {d, n, end, 0, 0, 0}; int pred[4] = {0}, rst = 0, bad = 0;
+      for (int by = 0; by < my && !bad; by++) for (int bx = 0; bx < mx && !bad; bx++) {
+        if (ri && rst == ri) { b.cnt = 0; b.eof = 0; while (b.p + 1 < n && !(d[b.p] == 0xFF && d[b.p + 1] >= 0xD0 && d[b.p + 1] <= 0xD7)) b.p++; b.p += 2; memset(pred, 0, sizeof pred); rst = 0; }
+        rst++;
+        for (int c = 0; c < nc; c++) for (int v = 0; v < cvs[c]; v++) for (int u = 0; u < chs[c]; u++) {
+          int blk[64]; memset(blk, 0, sizeof blk);
+          int t = jdec(&b, &hdc[td[c]]); if (t < 0 || t > 15) { bad = 1; break; }
+          pred[c] += jext(jrecv(&b, t), t); blk[0] = pred[c] * qt[cq[c]][0];
+          for (int k = 1; k < 64;) { int rs = jdec(&b, &hac[ta[c]]); if (rs < 0) { bad = 1; break; } int r = rs >> 4, sz = rs & 15; if (!sz) { if (r == 15) { k += 16; continue; } break; } k += r; if (k > 63) break; blk[jzz[k]] = jext(jrecv(&b, sz), sz) * qt[cq[c]][jzz[k]]; k++; }
+          if (bad) break;
+          jidct(blk, pl[c] + (size_t)((by * cvs[c] + v) * 8) * pw[c] + (bx * chs[c] + u) * 8, pw[c]);
+        }
+      }
+      uint32_t *out = bad && 0 ? 0 : malloc((size_t)w * h * 4);
+      if (out) for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+        int v[3];
+        for (int c = 0; c < nc; c++) v[c] = pl[c][(size_t)(y * cvs[c] / vmax) * pw[c] + x * chs[c] / hmax];
+        int r, g, bl;
+        if (nc == 1) r = g = bl = v[0];
+        else { float Y = v[0], cb = v[1] - 128, cr = v[2] - 128; r = (int)(Y + 1.402f * cr + 0.5f); g = (int)(Y - 0.344136f * cb - 0.714136f * cr + 0.5f); bl = (int)(Y + 1.772f * cb + 0.5f); }
+        r = r < 0 ? 0 : r > 255 ? 255 : r; g = g < 0 ? 0 : g > 255 ? 255 : g; bl = bl < 0 ? 0 : bl > 255 ? 255 : bl;
+        out[(size_t)y * w + x] = 0xFF000000u | (r << 16) | (g << 8) | bl;
+      }
+      for (int i = 0; i < nc; i++) free(pl[i]);
+      *ow = w; *oh = h; return out;
+    }
+    p = end;
+  }
+  return 0;
 }

@@ -66,7 +66,7 @@ static const BDef bdefs[] = {
   {"java/lang/Integer", "java/lang/Object", 1}, {"java/lang/Byte", "java/lang/Object", 1}, {"java/lang/Long", "java/lang/Object", 1}, {"java/lang/Boolean", "java/lang/Object", 1},
   {"java/lang/Character", "java/lang/Object", 1}, {"java/io/PrintStream", "java/lang/Object", 0}, {"java/util/Random", "java/lang/Object", 1},
   {"java/util/Vector", "java/lang/Object", 3}, {"java/util/Stack", "java/util/Vector", 0}, {"java/util/ArrayList", "java/lang/Object", 3},
-  {"java/util/Hashtable", "java/lang/Object", 3}, {"java/util/HashMap", "java/lang/Object", 3},
+  {"java/util/Hashtable", "java/lang/Object", 3}, {"java/util/Date", "java/lang/Object", 1}, {"java/util/Calendar", "java/lang/Object", 1}, {"java/util/EnumImpl", "java/lang/Object", 3}, {"javax/microedition/io/ConnectionNotFoundException", "java/io/IOException", 0}, {"javax/microedition/io/Connector", "java/lang/Object", 0}, {"java/util/HashMap", "java/lang/Object", 3},
   {"java/io/EOFException", "java/io/IOException", 0}, {"java/io/UTFDataFormatException", "java/io/IOException", 0}, {"java/util/Arrays", "java/lang/Object", 0},
   {"java/io/InputStream", "java/lang/Object", 4}, {"java/io/ByteArrayInputStream", "java/io/InputStream", 4}, {"java/io/DataInputStream", "java/io/InputStream", 4},
   {"java/io/OutputStream", "java/lang/Object", 3}, {"java/io/ByteArrayOutputStream", "java/io/OutputStream", 3}, {"java/io/DataOutputStream", "java/io/OutputStream", 3},
@@ -257,6 +257,7 @@ static void traceHere(const char *what, const char *msg) {
   if (g_trace < 0) g_trace = getenv("JVM_TRACE") != 0;
   if (!g_trace || !curT) return;
   fprintf(stderr, "[throw %s: %s]", what, msg ? msg : "");
+  if (curT->nfs > 0) { Frame *f = &curT->fs[curT->nfs - 1]; fprintf(stderr, "@%ld", (long)(f->pc - f->m->code)); }
   for (int i = curT->nfs - 1, k = 0; i >= 0 && k < 6; i--, k++) { Method *m = curT->fs[i].m; fprintf(stderr, " <- %s.%s%s", m->cls->name, m->name, m->desc); }
   fprintf(stderr, "\n");
 }

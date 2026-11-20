@@ -1,6 +1,7 @@
 // Phần bổ sung: System.getProperty, Class.forName, Runtime, Math, Character.digit, và các màn hình lcdui (List/Alert/Form/TextBox)
 // ở dạng khung rỗng (giao diện thật sẽ do host Dart dựng).
 #include "jvm.h"
+#include <time.h>
 
 #define NS(cls, name, desc, fn) regNative(cls, name, desc, 1, fn)
 #define NI(cls, name, desc, fn) regNative(cls, name, desc, 0, fn)
@@ -69,7 +70,55 @@ static void tb_get(Slot *a) { Obj *o = OBJ(0); a[0].a = o->f[2].a ? o->f[2].a : 
 static void tb_set(Slot *a) { OBJ(0)->f[2].a = a[1].a; }
 static void tb_max(Slot *a) { a[0].i = a[1].i; }
 
+// ---- java.util.Date / Calendar (giờ địa phương) ----
+static void dt_init(Slot *a) { OBJ(0)->f[0].l = nowMs(); }
+static void dt_initJ(Slot *a) { OBJ(0)->f[0].l = a[1].l; }
+static void dt_get(Slot *a) { a[0].l = OBJ(0)->f[0].l; }
+static void dt_set(Slot *a) { OBJ(0)->f[0].l = a[1].l; }
+static void cal_inst(Slot *a) { Obj *c = newObj(loadClass("java/util/Calendar")); c->f[0].l = nowMs(); a[0].a = c; }
+static void cal_instTZ(Slot *a) { cal_inst(a); }
+static void cal_getTime(Slot *a) { Obj *d = newObj(loadClass("java/util/Date")); d->f[0].l = OBJ(0)->f[0].l; a[0].a = d; }
+static void cal_setTime(Slot *a) { Obj *d = OBJ(1); if (!d) { throwNew("java/lang/NullPointerException", 0); return; } OBJ(0)->f[0].l = d->f[0].l; }
+static void cal_get(Slot *a) {
+  int64_t ms = OBJ(0)->f[0].l; time_t t = (time_t)(ms >= 0 ? ms / 1000 : -((-ms + 999) / 1000)); struct tm tm; localtime_r(&t, &tm);
+  int64_t r = (ms % 1000 + 1000) % 1000; int f = a[1].i, v = 0;
+  switch (f) { case 1: v = tm.tm_year + 1900; break; case 2: v = tm.tm_mon; break; case 3: v = (tm.tm_yday + 7 - tm.tm_wday) / 7 + 1; break; case 5: v = tm.tm_mday; break;
+    case 6: v = tm.tm_yday + 1; break; case 7: v = tm.tm_wday + 1; break; case 9: v = tm.tm_hour >= 12; break; case 10: v = tm.tm_hour % 12; break;
+    case 11: v = tm.tm_hour; break; case 12: v = tm.tm_min; break; case 13: v = tm.tm_sec; break; case 14: v = (int)r; break; }
+  a[0].i = v;
+}
+static void cal_set(Slot *a) {
+  int64_t ms = OBJ(0)->f[0].l; time_t t = (time_t)(ms >= 0 ? ms / 1000 : -((-ms + 999) / 1000)); struct tm tm; localtime_r(&t, &tm);
+  int64_t r = (ms % 1000 + 1000) % 1000; int f = a[1].i, v = a[2].i;
+  switch (f) { case 1: tm.tm_year = v - 1900; break; case 2: tm.tm_mon = v; break; case 5: tm.tm_mday = v; break; case 10: tm.tm_hour = v + (tm.tm_hour >= 12 ? 12 : 0); break;
+    case 11: tm.tm_hour = v; break; case 12: tm.tm_min = v; break; case 13: tm.tm_sec = v; break; case 14: r = v; break; }
+  tm.tm_isdst = -1; OBJ(0)->f[0].l = (int64_t)mktime(&tm) * 1000 + r;
+}
+static void cal_setYMD(Slot *a) { Slot b[3]; b[0] = a[0]; b[1].i = 1; b[2].i = a[1].i; cal_set(b); b[1].i = 2; b[2].i = a[2].i; cal_set(b); b[1].i = 5; b[2].i = a[3].i; cal_set(b); }
+static void cal_add(Slot *a) {
+  int f = a[1].i, v = a[2].i; int64_t *m = &OBJ(0)->f[0].l; int64_t unit = 0;
+  switch (f) { case 5: case 6: case 7: unit = 86400000LL; break; case 10: case 11: unit = 3600000LL; break; case 12: unit = 60000LL; break; case 13: unit = 1000LL; break; case 14: unit = 1; break; }
+  if (unit) { *m += unit * v; return; }
+  Slot b[3]; b[0] = a[0]; Slot g[2]; g[0] = a[0];
+  if (f == 1) { g[1].i = 1; cal_get(g); b[1].i = 1; b[2].i = g[0].i + v; cal_set(b); }
+  else if (f == 2) { g[0] = a[0]; g[1].i = 2; cal_get(g); int mo = g[0].i + v; g[0] = a[0]; g[1].i = 1; cal_get(g); int y = g[0].i + (mo >= 0 ? mo / 12 : -((11 - mo) / 12)); mo = ((mo % 12) + 12) % 12; b[1].i = 1; b[2].i = y; cal_set(b); b[1].i = 2; b[2].i = mo; cal_set(b); }
+}
+static void cal_getMs(Slot *a) { a[0].l = OBJ(0)->f[0].l; }
+static void cal_setMs(Slot *a) { OBJ(0)->f[0].l = a[1].l; }
+// ---- Connector: chưa hỗ trợ mạng, báo lỗi để game tự xử lý ----
+static void con_open(Slot *a) { (void)a; throwNew("javax/microedition/io/ConnectionNotFoundException", "no network"); }
+
 void installMisc(void) {
+  { const char *D = "java/util/Date", *K = "java/util/Calendar", *CN = "javax/microedition/io/Connector";
+    NI(D, "<init>", "()V", dt_init); NI(D, "<init>", "(J)V", dt_initJ); NI(D, "getTime", "()J", dt_get); NI(D, "setTime", "(J)V", dt_set);
+    NS(K, "getInstance", "()Ljava/util/Calendar;", cal_inst); NS(K, "getInstance", "(Ljava/util/TimeZone;)Ljava/util/Calendar;", cal_instTZ);
+    NI(K, "getTime", "()Ljava/util/Date;", cal_getTime); NI(K, "setTime", "(Ljava/util/Date;)V", cal_setTime); NI(K, "get", "(I)I", cal_get); NI(K, "set", "(II)V", cal_set);
+    NI(K, "set", "(III)V", cal_setYMD); NI(K, "add", "(II)V", cal_add); NI(K, "getTimeInMillis", "()J", cal_getMs); NI(K, "setTimeInMillis", "(J)V", cal_setMs);
+    NS(CN, "open", "(Ljava/lang/String;)Ljavax/microedition/io/Connection;", con_open); NS(CN, "open", "(Ljava/lang/String;I)Ljavax/microedition/io/Connection;", con_open);
+    NS(CN, "open", "(Ljava/lang/String;IZ)Ljavax/microedition/io/Connection;", con_open);
+    NS(CN, "openInputStream", "(Ljava/lang/String;)Ljava/io/InputStream;", con_open); NS(CN, "openDataInputStream", "(Ljava/lang/String;)Ljava/io/DataInputStream;", con_open);
+  }
+
   const char *Y = "java/lang/System", *C = "java/lang/Class", *M = "java/lang/Math", *R = "java/lang/Runtime", *CH = "java/lang/Character";
   NS(Y, "getProperty", "(Ljava/lang/String;)Ljava/lang/String;", sy_getProp);
   NI(C, "getClassLoader", "()Ljava/lang/ClassLoader;", cl_loader); NS(C, "forName", "(Ljava/lang/String;)Ljava/lang/Class;", cl_forName);
