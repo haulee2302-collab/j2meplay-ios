@@ -43,9 +43,15 @@ class EmuSession extends ChangeNotifier {
   bool error = false, ready = false, foreground = true, _busy = false;
   /// Chế độ "vẽ giả": game vẫn chạy logic nhưng không dựng hình (tiết kiệm máy cho game tự đánh, treo máy).
   bool noDraw = false;
+  /// Lõi C chỉ dựng hình khi đang xem game. Chạy ẩn (thoát màn hình / app xuống nền) thì tự "vẽ giả".
+  void syncDraw() {
+    final hidden = !foreground || !BgKeep.active;
+    _core?.setDraw(!(noDraw || (hidden && !Pip.wants(inst.id))));
+  }
+
   void setNoDraw(bool v) {
     noDraw = v;
-    _core?.setDraw(!v); // lõi C bỏ hẳn lệnh vẽ lên màn hình
+    syncDraw();
     if (!v && ready) resume();
     notifyListeners();
   }
@@ -200,6 +206,7 @@ class EmuSession extends ChangeNotifier {
       }
       _core = core;
       JvmCore.markRunning(true);
+      syncDraw();
       _rend = JpcRenderer();
       _coreMode = true;
       _coreEnded = false;
@@ -498,6 +505,7 @@ class EmuRuntime {
     }
     final wasHidden = !s.foreground;
     s.foreground = true;
+    s.syncDraw();
     if (wasHidden && s.ready) s.resume(); // quay lại game đang chạy ẩn: vẽ lại toàn bộ khung
     return s;
   }

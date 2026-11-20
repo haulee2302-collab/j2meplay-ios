@@ -139,6 +139,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
     s.frame.removeListener(_t);
     s.saveShot();
     s.foreground = false; // chạy ẩn khi thoát màn hình
+    s.syncDraw(); // chạy ẩn thì tự vẽ giả
     EmuRuntime.changed.value++;
     super.dispose();
   }

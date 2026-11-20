@@ -30,6 +30,9 @@ class BgKeep with WidgetsBindingObserver {
     // Dấu "lõi C đang chạy" chỉ có nghĩa khi app ở foreground (iOS có thể tự đóng app nền).
     JvmCore.markRunning(active && EmuRuntime.sessions.values.any((e) => e.usesCore));
     _notice();
+    for (final e in EmuRuntime.sessions.values) {
+      e.syncDraw();
+    }
     if (active) {
       for (final e in EmuRuntime.sessions.values) {
         e.resume();
