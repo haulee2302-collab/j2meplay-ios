@@ -57,3 +57,6 @@ void installMidp(void);
 void installMisc(void);
 #define ARRB(o) ((int8_t *)((Arr *)(o))->d)
 #endif
+
+int midpUiPoll(char *buf, int cap);
+void midpUiAction(const char *s);

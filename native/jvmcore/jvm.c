@@ -66,7 +66,7 @@ static const BDef bdefs[] = {
   {"java/lang/Integer", "java/lang/Object", 1}, {"java/lang/Byte", "java/lang/Object", 1}, {"java/lang/Long", "java/lang/Object", 1}, {"java/lang/Boolean", "java/lang/Object", 1},
   {"java/lang/Character", "java/lang/Object", 1}, {"java/io/PrintStream", "java/lang/Object", 0}, {"java/util/Random", "java/lang/Object", 1},
   {"java/util/Vector", "java/lang/Object", 3}, {"java/util/Stack", "java/util/Vector", 0}, {"java/util/ArrayList", "java/lang/Object", 3},
-  {"java/util/Hashtable", "java/lang/Object", 3}, {"java/util/Date", "java/lang/Object", 1}, {"java/util/Calendar", "java/lang/Object", 1}, {"java/util/EnumImpl", "java/lang/Object", 3}, {"javax/microedition/io/ConnectionNotFoundException", "java/io/IOException", 0}, {"javax/microedition/io/Connector", "java/lang/Object", 0}, {"java/util/HashMap", "java/lang/Object", 3},
+  {"java/util/Hashtable", "java/lang/Object", 3}, {"javax/microedition/lcdui/ImageItem", "javax/microedition/lcdui/Item", 2}, {"javax/microedition/lcdui/Spacer", "javax/microedition/lcdui/Item", 2}, {"javax/microedition/lcdui/DateField", "javax/microedition/lcdui/Item", 2}, {"javax/microedition/lcdui/Ticker", "java/lang/Object", 2}, {"java/util/Date", "java/lang/Object", 1}, {"java/util/Calendar", "java/lang/Object", 1}, {"java/util/EnumImpl", "java/lang/Object", 3}, {"javax/microedition/io/ConnectionNotFoundException", "java/io/IOException", 0}, {"javax/microedition/io/Connector", "java/lang/Object", 0}, {"java/util/HashMap", "java/lang/Object", 3},
   {"java/io/EOFException", "java/io/IOException", 0}, {"java/io/UTFDataFormatException", "java/io/IOException", 0}, {"java/util/Arrays", "java/lang/Object", 0},
   {"java/io/InputStream", "java/lang/Object", 4}, {"java/io/ByteArrayInputStream", "java/io/InputStream", 4}, {"java/io/DataInputStream", "java/io/InputStream", 4},
   {"java/io/OutputStream", "java/lang/Object", 3}, {"java/io/ByteArrayOutputStream", "java/io/OutputStream", 3}, {"java/io/DataOutputStream", "java/io/OutputStream", 3},
@@ -549,6 +549,7 @@ static int interp(int base) {
       st->tm = tm; e->cache = st;
     }
     Method *tm = st->tm; int ilen = op == 185 ? 5 : 3;
+    { static int dbg = -1; if (dbg < 0) dbg = getenv("JVM_CALLS") != 0; if (dbg && !tm->cls->builtin) fprintf(stderr, "CALL %s.%s%s\n", tm->cls->name, tm->name, tm->desc); else if (dbg) fprintf(stderr, "NAT %s.%s\n", tm->cls->name, tm->name); }
     if (op == 184 && tm->cls->initState != 2) { SAVE(); if (ensureInit(tm->cls, sp)) { LOADF(); NEXT; } }
     if (op != 184) {
       Obj *recv = sp[-tm->argSlots].a;
@@ -887,6 +888,8 @@ EXPORT int jvmcore_poll(uint8_t *buf, int cap) {
   if (fqn) { QF *f = &fq[fqh]; if (f->n > cap) r = -f->n; else { memcpy(buf, f->d, f->n); r = f->n; free(f->d); fqh = (fqh + 1) % QCAP; fqn--; } }
   pthread_mutex_unlock(&fqmu); return r;
 }
+EXPORT int jvmcore_ui_poll(char *buf, int cap) { return midpUiPoll(buf, cap); }
+EXPORT void jvmcore_ui_action(const char *s) { midpUiAction(s); }
 EXPORT void jvmcore_refresh(void) { midpForceKey(); }
 EXPORT void jvmcore_key(int type, int code) { midpKey(type, code); }
 EXPORT void jvmcore_pointer(int type, int x, int y) { midpPointer(type, x, y); }

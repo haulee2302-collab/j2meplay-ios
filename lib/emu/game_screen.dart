@@ -7,6 +7,7 @@ import '../screens/game.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'core.dart';
+import 'core_ui.dart';
 import 'kbd.dart';
 import 'screens_ui.dart';
 import 'pip.dart';
@@ -213,6 +214,10 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                                 child: RawImage(image: s.frame.value, fit: BoxFit.fill, filterQuality: Jp.fq),
                               ),
                             if (s.midp?.form != null) Positioned.fill(child: MidpScreenView(midp: s.midp!)),
+                            ValueListenableBuilder<Map<String, dynamic>?>(
+                              valueListenable: s.screen,
+                              builder: (_, m, __) => m == null ? const SizedBox.shrink() : CoreScreenView(data: m, act: s.uiAct),
+                            ),
                             if (s.frame.value == null || s.error)
                               Container(
                                 color: Jp.surface,

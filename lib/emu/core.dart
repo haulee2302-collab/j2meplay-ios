@@ -66,6 +66,10 @@ class JvmCore {
   final Pointer<Utf8> Function() _error;
   final void Function() _stop, _refresh;
   final Pointer<Utf8> Function() _log;
+  final int Function(Pointer<Uint8>, int) _uiPoll;
+  final void Function(Pointer<Utf8>) _uiAct;
+  Pointer<Uint8> _ubuf = malloc<Uint8>(1 << 16);
+  int _ucap = 1 << 16;
   Pointer<Uint8> _buf = malloc<Uint8>(1 << 20);
   int _cap = 1 << 20;
 
@@ -78,7 +82,9 @@ class JvmCore {
         _error = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_error'),
         _stop = l.lookupFunction<Void Function(), void Function()>('jvmcore_stop'),
         _refresh = l.lookupFunction<Void Function(), void Function()>('jvmcore_refresh'),
-        _log = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_log');
+        _log = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_log'),
+        _uiPoll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_ui_poll'),
+        _uiAct = l.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('jvmcore_ui_action');
 
   /// 0 chưa chạy · 1 đang chạy · 2 đã thoát · -1 lỗi
   int get status => _status();
@@ -112,6 +118,30 @@ class JvmCore {
       if (n <= 0) return null;
     }
     return _buf.asTypedList(n);
+  }
+
+  /// Mô tả JSON của màn hình List/Form/TextBox/Alert đang hiện (null nếu không đổi).
+  String? uiPoll() {
+    var n = _uiPoll(_ubuf, _ucap);
+    if (n == 0) return null;
+    if (n < 0) {
+      malloc.free(_ubuf);
+      _ucap = -n + 1024;
+      _ubuf = malloc<Uint8>(_ucap);
+      n = _uiPoll(_ubuf, _ucap);
+      if (n <= 0) return null;
+    }
+    return utf8.decode(_ubuf.asTypedList(n), allowMalformed: true);
+  }
+
+  /// Gửi thao tác của người dùng trên màn hình đó: K<lệnh> · L<mục> · M<bits> · E<chữ> · T<mục>:<chữ> · S<mục>:<bits> · G<mục>:<giá trị> · D (đóng Alert).
+  void uiAction(String s) {
+    final p = s.toNativeUtf8();
+    try {
+      _uiAct(p);
+    } finally {
+      malloc.free(p);
+    }
   }
 
   void key(int type, int code) => _key(type, code);

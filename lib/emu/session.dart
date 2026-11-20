@@ -42,6 +42,10 @@ class EmuSession extends ChangeNotifier {
   bool error = false, ready = false, foreground = true, _busy = false;
   final List<String> log = [];
   final ValueNotifier<ui.Image?> frame = ValueNotifier(null);
+  // Màn hình List/Form/TextBox/Alert do lõi C mô tả (null = đang ở màn hình vẽ bằng khung hình).
+  final ValueNotifier<Map<String, dynamic>?> screen = ValueNotifier(null);
+  bool _uiSeen = false;
+  void uiAct(String s) => _core?.uiAction(s);
   // Lõi C (thử nghiệm): khung hình JPC1 do native/jvmcore phát, vẽ bằng JpcRenderer của phiên thuê.
   JvmCore? _core;
   JpcRenderer? _rend;
@@ -179,7 +183,7 @@ class EmuSession extends ChangeNotifier {
 
   /// Sau 8 giây lõi C vẫn chưa ra khung hình nào: lấy log, dừng lõi và chạy lại bằng bộ thông dịch Dart.
   Future<void> _coreWatchdog() async {
-    if (!_coreMode || frame.value != null) return;
+    if (!_coreMode || frame.value != null || _uiSeen) return;
     final core = _core;
     var lg = '';
     try {
@@ -218,8 +222,21 @@ class EmuSession extends ChangeNotifier {
         }
       }
       if (any) _presentCore();
+      final uj = core.uiPoll();
+      if (uj != null) {
+        try {
+          final m = jsonDecode(uj) as Map<String, dynamic>;
+          if (m['kind'] == 'none') {
+            screen.value = null;
+            core.refresh();
+          } else {
+            _uiSeen = true;
+            screen.value = m;
+          }
+        } catch (_) {}
+      }
       final st = core.status;
-      if ((st == -1 || st == 2) && frame.value == null && !_coreEnded) {
+      if ((st == -1 || st == 2) && frame.value == null && !_uiSeen && !_coreEnded) {
         _coreEnded = true;
         await _coreWatchdog();
         return;
@@ -338,6 +355,7 @@ class EmuSession extends ChangeNotifier {
   void stop() {
     _timer?.cancel();
     _watch?.cancel();
+    screen.value = null;
     if (_coreMode) {
       _coreMode = false;
       _core?.stop();

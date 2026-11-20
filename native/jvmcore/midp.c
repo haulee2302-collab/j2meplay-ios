@@ -310,7 +310,7 @@ static Class *cvCls() { return canvasCls ? canvasCls : (canvasCls = loadClass(LC
 static int isCanvas(Obj *o) { return o && subOf(o->cls, cvCls()); }
 
 typedef struct { int kind, a, b; Obj *o; } Ev;
-enum { EK_KEYD, EK_KEYU, EK_KEYR, EK_PD, EK_PU, EK_PM, EK_SERIAL, EK_CMD, EK_SHOW };
+enum { EK_KEYD, EK_KEYU, EK_KEYR, EK_PD, EK_PU, EK_PM, EK_SERIAL, EK_CMD, EK_SHOW, EK_ITEM };
 static Ev evq[512]; static int evh, evt;
 static pthread_mutex_t evmu = PTHREAD_MUTEX_INITIALIZER;
 static void evPush(int kind, int a, int b, Obj *o) { pthread_mutex_lock(&evmu); int n = (evt + 1) % 512; if (n != evh) { evq[evt] = (Ev){kind, a, b, o}; evt = n; } pthread_mutex_unlock(&evmu); }
@@ -365,8 +365,11 @@ static void fn_gcGetG(Slot *a) { (void)a; if (!g_gcG) g_gcG = newGraphics(0, g_s
 static void fn_gcFlush(Slot *a) { (void)a; if (frameOpen) frameEnd(); g_repaint = 0; }
 static void fn_gcKeys(Slot *a) { a[0].i = g_keyBits; }
 
+#include "ui.inc"
+
 // ---- phát sự kiện: gọi trên luồng sự kiện ----
 static int startEvent(Ev *e) {
+  if (getenv("JVM_CALLS")) fprintf(stderr, "EV kind=%d a=%d\n", e->kind, e->a);
   Obj *cv = g_cur; Method *m = 0; Slot ar[4]; int n = 0;
   switch (e->kind) {
     case EK_KEYD: if (!isCanvas(cv)) return 0; m = findMethod(cv->cls, "keyPressed", "(I)V"); ar[0].a = cv; ar[1].i = e->a; n = 2; break;
@@ -377,6 +380,9 @@ static int startEvent(Ev *e) {
     case EK_PM: if (!isCanvas(cv)) return 0; m = findMethod(cv->cls, "pointerDragged", "(II)V"); ar[0].a = cv; ar[1].i = e->a; ar[2].i = e->b; n = 3; break;
     case EK_SERIAL: m = findMethod(e->o->cls, "run", "()V"); ar[0].a = e->o; n = 1; break;
     case EK_SHOW: if (!isCanvas(e->o)) return 0; m = findMethod(e->o->cls, "showNotify", "()V"); ar[0].a = e->o; n = 1; break;
+    case EK_CMD: { if (!e->o || isCanvas(e->o)) return 0; UiD *u = ud(e->o, 0); Obj *cmd = e->a < 0 ? (u->selCmd ? u->selCmd : (Obj *)loadClass(LCD "List")->statics[0].a) : (e->a < u->ncmd ? u->cmd[e->a] : 0); Obj *l = e->o->f[D_LISTENER].a; if (!l || !cmd) return 0;
+      m = findMethod(l->cls, "commandAction", "(Ljavax/microedition/lcdui/Command;Ljavax/microedition/lcdui/Displayable;)V"); ar[0].a = l; ar[1].a = cmd; ar[2].a = e->o; n = 3; break; }
+    case EK_ITEM: { if (!e->o) return 0; UiD *u = ud(e->o, 0); Obj *l = u->stateL; if (!l || e->a >= u->nit) return 0; m = findMethod(l->cls, "itemStateChanged", "(Ljavax/microedition/lcdui/Item;)V"); ar[0].a = l; ar[1].a = u->items[e->a]; n = 2; break; }
     default: return 0;
   }
   if (!m || m->native) return 0;
@@ -384,6 +390,7 @@ static int startEvent(Ev *e) {
 }
 static void midpIdle(void) {
   if (!evT) evT = evThreadNew();
+  uiTick();
   if (evBusy && !evThreadBusy(evT)) { evBusy = 0; if (evPaint) { evPaint = 0; frameEnd(); lastPaint = nowMs(); } }
   if (evBusy) return;
   for (;;) { pthread_mutex_lock(&evmu); if (evh == evt) { pthread_mutex_unlock(&evmu); break; } Ev e = evq[evh]; evh = (evh + 1) % 512; pthread_mutex_unlock(&evmu); if (startEvent(&e)) return; }
@@ -400,7 +407,25 @@ static void midpIdle(void) {
 static void fn_midInit(Slot *a) { g_midlet = OBJ(0); }
 static void fn_notifyDestroyed(Slot *a) { (void)a; g_destroyed = 1; }
 static void fn_platformReq(Slot *a) { a[0].i = 0; }
-static void fn_getProp(Slot *a) { a[0].a = 0; }
+static Obj *utf8Str(const char *s);
+// MIDlet.getAppProperty: đọc META-INF/MANIFEST.MF (và .jad cạnh đó nếu có) trong thư mục lớp
+static char *g_mf; static int g_mfLen;
+static void mfLoad(void) {
+  if (g_mf) return; int n = 0; uint8_t *d = loadResource("META-INF/MANIFEST.MF", &n);
+  if (!d) { g_mf = strdup(""); g_mfLen = 0; return; }
+  char *t = malloc(n + 2); int k = 0;
+  for (int i = 0; i < n; i++) { if (d[i] == '\r') continue; if (d[i] == '\n' && i + 1 < n && d[i + 1] == ' ') { i++; continue; } t[k++] = d[i]; } t[k] = 0; g_mf = t; g_mfLen = k;
+}
+static void fn_getProp(Slot *a) {
+  Obj *k = OBJ(1); if (!k) { throwNew("java/lang/NullPointerException", 0); return; } mfLoad();
+  char key[200]; cstr(k, key, sizeof key); size_t kl = strlen(key);
+  for (char *p = g_mf; p && *p;) {
+    char *e = strchr(p, '\n'); size_t ll = e ? (size_t)(e - p) : strlen(p);
+    if (ll > kl && !strncmp(p, key, kl) && p[kl] == ':') { const char *v = p + kl + 1; while (*v == ' ') v++; size_t vl = ll - (size_t)(v - p); char *tmp = malloc(vl + 1); memcpy(tmp, v, vl); tmp[vl] = 0; a[0].a = utf8Str(tmp); free(tmp); return; }
+    p = e ? e + 1 : 0;
+  }
+  a[0].a = 0;
+}
 static void fn_perm(Slot *a) { a[0].i = 1; }
 
 // Command
@@ -533,6 +558,7 @@ void installMidp(void) {
   NI(RE, "hasNextElement", "()Z", re_has); NI(RE, "nextRecordId", "()I", re_nextId); NI(RE, "nextRecord", "()[B", re_next); NI(RE, "numRecords", "()I", re_num); NI(RE, "reset", "()V", re_reset); NI(RE, "destroy", "()V", re_nop);
   (void)re_next; (void)fn_zero; (void)fn_false;
   g_idle = midpIdle;
+  uiInstall();
   g_screenG = newGraphics(0, g_sw, g_sh, 0);
 }
 
@@ -544,5 +570,5 @@ void midpForceKey(void) { needKey = 1; g_repaint = 1; frameOpen = 0; }
 void midpReset(void) {
   fontCls = imgCls = gfxCls = cmdCls = dispCls = canvasCls = rsCls = 0; defFont = 0; g_resId = 1; g_gcG = 0; g_cur = g_display = g_screenG = g_midlet = 0; gcCanvas = 0;
   g_repaint = 0; g_inPaint = 0; g_keyBits = 0; lastPaint = 0; evh = evt = 0; evT = 0; evBusy = evPaint = 0; rsList = 0; warnedText = 0; frameOpen = 0; needKey = 1; epoch = 1; g_frames = 0; g_destroyed = 0;
-  memset(heldK, 0, sizeof heldK);
+  memset(heldK, 0, sizeof heldK); g_prevScr = 0; free(g_mf); g_mf = 0; g_uiDirty = 1; uiAh = uiAt = 0; uiOutNew = 0;
 }
