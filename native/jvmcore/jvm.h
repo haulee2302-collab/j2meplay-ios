@@ -60,3 +60,5 @@ void installMisc(void);
 
 int midpUiPoll(char *buf, int cap);
 void midpUiAction(const char *s);
+int midpNetPoll(uint8_t *buf, int cap);
+void midpNetDone(int id, int status, const uint8_t *hdr, int hlen, const uint8_t *body, int blen);

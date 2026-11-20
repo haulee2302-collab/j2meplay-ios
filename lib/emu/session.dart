@@ -222,6 +222,8 @@ class EmuSession extends ChangeNotifier {
         }
       }
       if (any) _presentCore();
+      final nq = core.netPoll();
+      if (nq != null) unawaited(_netRequest(core, nq));
       final uj = core.uiPoll();
       if (uj != null) {
         try {
@@ -252,6 +254,59 @@ class EmuSession extends ChangeNotifier {
     } finally {
       _pumping = false;
     }
+  }
+
+  /// Thực hiện một yêu cầu HTTP/HTTPS do lõi C nhờ làm (lõi chờ kết quả, tối đa 30 giây).
+  Future<void> _netRequest(JvmCore core, Uint8List d) async {
+    var id = 0;
+    try {
+      final sep = _indexOf(d, const [10, 10]);
+      final head = utf8.decode(d.sublist(0, sep < 0 ? d.length : sep), allowMalformed: true).split('\n');
+      final body = sep < 0 ? Uint8List(0) : d.sublist(sep + 2);
+      id = int.parse(head[0]);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+      try {
+        final req = await client.openUrl(head[1], Uri.parse(head[2]));
+        var ua = false;
+        for (var i = 3; i < head.length; i++) {
+          final c = head[i].indexOf(':');
+          if (c <= 0) continue;
+          final k = head[i].substring(0, c).trim(), v = head[i].substring(c + 1).trim();
+          if (k.toLowerCase() == 'user-agent') ua = true;
+          req.headers.set(k, v);
+        }
+        if (!ua) req.headers.set('User-Agent', 'Profile/MIDP-2.0 Configuration/CLDC-1.1');
+        if (body.isNotEmpty) req.add(body);
+        final res = await req.close().timeout(const Duration(seconds: 25));
+        final bb = BytesBuilder(copy: false);
+        await for (final ch in res) {
+          bb.add(ch);
+          if (bb.length > 16 * 1024 * 1024) break;
+        }
+        final hb = StringBuffer();
+        res.headers.forEach((k, v) => hb.write('$k: ${v.join(', ')}\n'));
+        core.netDone(id, res.statusCode, Uint8List.fromList(utf8.encode(hb.toString())), bb.takeBytes());
+      } finally {
+        client.close(force: true);
+      }
+    } catch (e) {
+      _log('HTTP lỗi: $e');
+      if (id != 0) core.netDone(id, 0, Uint8List(0), Uint8List(0));
+    }
+  }
+
+  static int _indexOf(Uint8List d, List<int> pat) {
+    for (var i = 0; i + pat.length <= d.length; i++) {
+      var ok = true;
+      for (var k = 0; k < pat.length; k++) {
+        if (d[i + k] != pat[k]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return i;
+    }
+    return -1;
   }
 
   Future<void> _presentCore() async {

@@ -77,18 +77,13 @@ static void cal_add(Slot *a) {
 }
 static void cal_getMs(Slot *a) { a[0].l = OBJ(0)->f[0].l; }
 static void cal_setMs(Slot *a) { OBJ(0)->f[0].l = a[1].l; }
-// ---- Connector: chưa hỗ trợ mạng, báo lỗi để game tự xử lý ----
-static void con_open(Slot *a) { (void)a; throwNew("javax/microedition/io/ConnectionNotFoundException", "no network"); }
 
 void installMisc(void) {
-  { const char *D = "java/util/Date", *K = "java/util/Calendar", *CN = "javax/microedition/io/Connector";
+  { const char *D = "java/util/Date", *K = "java/util/Calendar";
     NI(D, "<init>", "()V", dt_init); NI(D, "<init>", "(J)V", dt_initJ); NI(D, "getTime", "()J", dt_get); NI(D, "setTime", "(J)V", dt_set);
     NS(K, "getInstance", "()Ljava/util/Calendar;", cal_inst); NS(K, "getInstance", "(Ljava/util/TimeZone;)Ljava/util/Calendar;", cal_instTZ);
     NI(K, "getTime", "()Ljava/util/Date;", cal_getTime); NI(K, "setTime", "(Ljava/util/Date;)V", cal_setTime); NI(K, "get", "(I)I", cal_get); NI(K, "set", "(II)V", cal_set);
     NI(K, "set", "(III)V", cal_setYMD); NI(K, "add", "(II)V", cal_add); NI(K, "getTimeInMillis", "()J", cal_getMs); NI(K, "setTimeInMillis", "(J)V", cal_setMs);
-    NS(CN, "open", "(Ljava/lang/String;)Ljavax/microedition/io/Connection;", con_open); NS(CN, "open", "(Ljava/lang/String;I)Ljavax/microedition/io/Connection;", con_open);
-    NS(CN, "open", "(Ljava/lang/String;IZ)Ljavax/microedition/io/Connection;", con_open);
-    NS(CN, "openInputStream", "(Ljava/lang/String;)Ljava/io/InputStream;", con_open); NS(CN, "openDataInputStream", "(Ljava/lang/String;)Ljava/io/DataInputStream;", con_open);
   }
 
   const char *Y = "java/lang/System", *C = "java/lang/Class", *M = "java/lang/Math", *R = "java/lang/Runtime", *CH = "java/lang/Character";

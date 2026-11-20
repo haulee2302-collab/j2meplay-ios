@@ -366,6 +366,7 @@ static void fn_gcFlush(Slot *a) { (void)a; if (frameOpen) frameEnd(); g_repaint 
 static void fn_gcKeys(Slot *a) { a[0].i = g_keyBits; }
 
 #include "ui.inc"
+#include "net.inc"
 
 // ---- phát sự kiện: gọi trên luồng sự kiện ----
 static int startEvent(Ev *e) {
@@ -559,6 +560,7 @@ void installMidp(void) {
   (void)re_next; (void)fn_zero; (void)fn_false;
   g_idle = midpIdle;
   uiInstall();
+  netInstall();
   g_screenG = newGraphics(0, g_sw, g_sh, 0);
 }
 

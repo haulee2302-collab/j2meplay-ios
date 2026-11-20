@@ -68,6 +68,10 @@ class JvmCore {
   final Pointer<Utf8> Function() _log;
   final int Function(Pointer<Uint8>, int) _uiPoll;
   final void Function(Pointer<Utf8>) _uiAct;
+  final int Function(Pointer<Uint8>, int) _netPoll;
+  final void Function(int, int, Pointer<Uint8>, int, Pointer<Uint8>, int) _netDone;
+  Pointer<Uint8> _nbuf = malloc<Uint8>(1 << 16);
+  int _ncap = 1 << 16;
   Pointer<Uint8> _ubuf = malloc<Uint8>(1 << 16);
   int _ucap = 1 << 16;
   Pointer<Uint8> _buf = malloc<Uint8>(1 << 20);
@@ -84,7 +88,9 @@ class JvmCore {
         _refresh = l.lookupFunction<Void Function(), void Function()>('jvmcore_refresh'),
         _log = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_log'),
         _uiPoll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_ui_poll'),
-        _uiAct = l.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('jvmcore_ui_action');
+        _uiAct = l.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('jvmcore_ui_action'),
+        _netPoll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_net_poll'),
+        _netDone = l.lookupFunction<Void Function(Int32, Int32, Pointer<Uint8>, Int32, Pointer<Uint8>, Int32), void Function(int, int, Pointer<Uint8>, int, Pointer<Uint8>, int)>('jvmcore_net_done');
 
   /// 0 chưa chạy · 1 đang chạy · 2 đã thoát · -1 lỗi
   int get status => _status();
@@ -141,6 +147,33 @@ class JvmCore {
       _uiAct(p);
     } finally {
       malloc.free(p);
+    }
+  }
+
+  /// Yêu cầu HTTP do game phát ra (null nếu chưa có): "id\nPHƯƠNG THỨC\nURL\nKhóa: giá trị\n...\n\n" rồi tới thân yêu cầu.
+  Uint8List? netPoll() {
+    var n = _netPoll(_nbuf, _ncap);
+    if (n == 0) return null;
+    if (n < 0) {
+      malloc.free(_nbuf);
+      _ncap = -n + 1024;
+      _nbuf = malloc<Uint8>(_ncap);
+      n = _netPoll(_nbuf, _ncap);
+      if (n <= 0) return null;
+    }
+    return Uint8List.fromList(_nbuf.asTypedList(n));
+  }
+
+  /// Trả kết quả HTTP về lõi (status <= 0 = lỗi kết nối).
+  void netDone(int id, int status, Uint8List headers, Uint8List body) {
+    final h = malloc<Uint8>(headers.length + 1), b = malloc<Uint8>(body.length + 1);
+    try {
+      h.asTypedList(headers.length).setAll(0, headers);
+      b.asTypedList(body.length).setAll(0, body);
+      _netDone(id, status, h, headers.length, b, body.length);
+    } finally {
+      malloc.free(h);
+      malloc.free(b);
     }
   }
 
