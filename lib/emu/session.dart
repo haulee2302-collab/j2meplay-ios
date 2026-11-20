@@ -44,6 +44,7 @@ class EmuSession extends ChangeNotifier {
   bool noDraw = false;
   void setNoDraw(bool v) {
     noDraw = v;
+    _core?.setDraw(!v); // lõi C bỏ hẳn lệnh vẽ lên màn hình
     if (!v && ready) resume();
     notifyListeners();
   }

@@ -65,6 +65,7 @@ class JvmCore {
   final int Function() _status;
   final Pointer<Utf8> Function() _error;
   final void Function() _stop, _refresh;
+  final void Function(int) _setDraw;
   final Pointer<Utf8> Function() _log;
   final int Function(Pointer<Uint8>, int) _uiPoll;
   final void Function(Pointer<Utf8>) _uiAct;
@@ -85,6 +86,7 @@ class JvmCore {
         _status = l.lookupFunction<Int32 Function(), int Function()>('jvmcore_status'),
         _error = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_error'),
         _stop = l.lookupFunction<Void Function(), void Function()>('jvmcore_stop'),
+        _setDraw = l.lookupFunction<Void Function(Int32), void Function(int)>('jvmcore_set_draw'),
         _refresh = l.lookupFunction<Void Function(), void Function()>('jvmcore_refresh'),
         _log = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_log'),
         _uiPoll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_ui_poll'),
@@ -181,6 +183,7 @@ class JvmCore {
   void pointer(int type, int x, int y) => _ptr(type, x, y);
   void stop() => _stop();
   void refresh() => _refresh();
+  void setDraw(bool on) => _setDraw(on ? 1 : 0);
 }
 
 /// Giải nén JAR ra thư mục (một lần cho mỗi JAR) để lõi C nạp lớp và tài nguyên trực tiếp từ tệp.

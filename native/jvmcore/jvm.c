@@ -896,6 +896,8 @@ EXPORT int jvmcore_net_poll(uint8_t *buf, int cap) { return midpNetPoll(buf, cap
 EXPORT void jvmcore_net_done(int id, int status, const uint8_t *h, int hl, const uint8_t *b, int bl) { midpNetDone(id, status, h, hl, b, bl); }
 EXPORT int jvmcore_ui_poll(char *buf, int cap) { return midpUiPoll(buf, cap); }
 EXPORT void jvmcore_ui_action(const char *s) { midpUiAction(s); }
+void midpSetDraw(int on);
+EXPORT void jvmcore_set_draw(int on) { midpSetDraw(on); }
 EXPORT void jvmcore_refresh(void) { midpForceKey(); }
 EXPORT void jvmcore_key(int type, int code) { midpKey(type, code); }
 EXPORT void jvmcore_pointer(int type, int x, int y) { midpPointer(type, x, y); }

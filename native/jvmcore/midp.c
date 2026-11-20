@@ -38,6 +38,7 @@ static void utf8(Obj *s, int from, int n, uint8_t **out, int *len) {
 }
 
 // ---------------- JPC1 ----------------
+int g_noDraw; /* "vẽ giả": lệnh vẽ lên màn hình bị bỏ qua, không tạo khung */
 static uint8_t *fb; static int fl, fcap; static int frameOpen, epoch = 1, needKey = 1, frameKey;
 static uint32_t lCol; static int lcl, lct, lcr, lcb, lst;
 static void pb(int v) { if (fl + 1 > fcap) { fcap = fcap * 2 + 4096; fb = realloc(fb, fcap); } fb[fl++] = (uint8_t)v; }
@@ -50,7 +51,7 @@ static void frameBegin(void) {
 }
 static void frameEnd(void) {
   if (!frameOpen) return; frameOpen = 0; g_frames++;
-  if (g_frameSink) g_frameSink(fb, fl, frameKey);
+  if (g_frameSink && !g_noDraw) g_frameSink(fb, fl, frameKey);
 }
 
 // ---------------- Font ----------------
@@ -126,7 +127,7 @@ static void gReset(Obj *g, int w, int h) { g->f[G_COL].i = 0; g->f[G_TX].i = 0; 
 static Surf *gT(Obj *g) { return g->f[G_T].a; }
 static void frameBegin(void);
 static Obj *g_gcG;
-static int gOn(Obj *g) { if (gT(g)) return 1; if (!frameOpen && g == g_gcG) frameBegin(); return frameOpen; }
+static int gOn(Obj *g) { if (gT(g)) return 1; if (g_noDraw) return 0; if (!frameOpen && g == g_gcG) frameBegin(); return frameOpen; }
 
 static void syncState(Obj *g) {
   int cl = g->f[G_CX].i, ct = g->f[G_CY].i, cr = cl + g->f[G_CW].i, cb = ct + g->f[G_CH].i; uint32_t col = (uint32_t)g->f[G_COL].i & 0xFFFFFF; int st = g->f[G_STROKE].i;
@@ -395,7 +396,7 @@ static void midpIdle(void) {
   if (evBusy && !evThreadBusy(evT)) { evBusy = 0; if (evPaint) { evPaint = 0; frameEnd(); lastPaint = nowMs(); } }
   if (evBusy) return;
   for (;;) { pthread_mutex_lock(&evmu); if (evh == evt) { pthread_mutex_unlock(&evmu); break; } Ev e = evq[evh]; evh = (evh + 1) % 512; pthread_mutex_unlock(&evmu); if (startEvent(&e)) return; }
-  if (g_repaint && isCanvas(g_cur) && g_cur != gcCanvas && nowMs() - lastPaint >= 16) {
+  if (g_repaint && isCanvas(g_cur) && g_cur != gcCanvas && nowMs() - lastPaint >= (g_noDraw ? 250 : 16)) {
     Method *m = findMethod(g_cur->cls, "paint", "(Ljavax/microedition/lcdui/Graphics;)V");
     if (m && !m->native) {
       g_repaint = 0; if (!frameOpen) frameBegin(); gReset(g_screenG, g_sw, g_sh);
@@ -568,6 +569,7 @@ void installMidp(void) {
 void midpSetScreen(int w, int h) { if (w != g_sw || h != g_sh) { g_sw = w; g_sh = h; needKey = 1; if (g_screenG) gReset(g_screenG, w, h); } g_repaint = 1; }
 void midpRequestRepaint(void) { g_repaint = 1; }
 
+void midpSetDraw(int on) { g_noDraw = !on; if (on) midpForceKey(); }
 void midpForceKey(void) { needKey = 1; g_repaint = 1; frameOpen = 0; }
 void midpReset(void) {
   fontCls = imgCls = gfxCls = cmdCls = dispCls = canvasCls = rsCls = 0; defFont = 0; g_resId = 1; g_gcG = 0; g_cur = g_display = g_screenG = g_midlet = 0; gcCanvas = 0;
