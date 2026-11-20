@@ -368,6 +368,7 @@ static void fn_gcKeys(Slot *a) { a[0].i = g_keyBits; }
 
 #include "ui.inc"
 #include "net.inc"
+#include "timer.inc"
 
 // ---- phát sự kiện: gọi trên luồng sự kiện ----
 static int startEvent(Ev *e) {
@@ -392,7 +393,7 @@ static int startEvent(Ev *e) {
 }
 static void midpIdle(void) {
   if (!evT) evT = evThreadNew();
-  uiTick();
+  uiTick(); tmTick();
   if (evBusy && !evThreadBusy(evT)) { evBusy = 0; if (evPaint) { evPaint = 0; frameEnd(); lastPaint = nowMs(); } }
   if (evBusy) return;
   for (;;) { pthread_mutex_lock(&evmu); if (evh == evt) { pthread_mutex_unlock(&evmu); break; } Ev e = evq[evh]; evh = (evh + 1) % 512; pthread_mutex_unlock(&evmu); if (startEvent(&e)) return; }
@@ -561,7 +562,7 @@ void installMidp(void) {
   (void)re_next; (void)fn_zero; (void)fn_false;
   g_idle = midpIdle;
   uiInstall();
-  netInstall();
+  netInstall(); mediaInstall();
   g_screenG = newGraphics(0, g_sw, g_sh, 0);
 }
 
@@ -573,6 +574,6 @@ void midpForceKey(void) { needKey = 1; g_repaint = 1; frameOpen = 0; }
 void midpSetDraw(int on) { g_noDraw = !on; if (on) midpForceKey(); }
 void midpReset(void) {
   fontCls = imgCls = gfxCls = cmdCls = dispCls = canvasCls = rsCls = 0; defFont = 0; g_resId = 1; g_gcG = 0; g_cur = g_display = g_screenG = g_midlet = 0; gcCanvas = 0;
-  g_repaint = 0; g_inPaint = 0; g_keyBits = 0; lastPaint = 0; evh = evt = 0; evT = 0; evBusy = evPaint = 0; rsList = 0; warnedText = 0; frameOpen = 0; needKey = 1; epoch = 1; g_frames = 0; g_destroyed = 0;
+  g_repaint = 0; g_inPaint = 0; g_keyBits = 0; lastPaint = 0; evh = evt = 0; evT = 0; evBusy = evPaint = 0; rsList = 0; warnedText = 0; frameOpen = 0; needKey = 1; epoch = 1; g_frames = 0; g_destroyed = 0; tmReset();
   memset(heldK, 0, sizeof heldK); g_prevScr = 0; free(g_mf); g_mf = 0; g_uiDirty = 1; uiAh = uiAt = 0; uiOutNew = 0;
 }

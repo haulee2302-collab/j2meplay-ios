@@ -51,6 +51,7 @@ void regNative(const char *cls, const char *name, const char *desc, int isStatic
 // ---------------- lớp có sẵn ----------------
 typedef struct { const char *name, *super; int nInst; } BDef;
 static const BDef bdefs[] = {
+  {"java/util/Timer", "java/lang/Object", 1}, {"java/util/TimerTask", "java/lang/Object", 1}, {"javax/microedition/media/MediaException", "java/io/IOException", 0}, {"javax/microedition/media/Control", "java/lang/Object", 0}, {"javax/microedition/media/control/VolumeControl", "javax/microedition/media/Control", 0}, {"javax/microedition/media/Player", "java/lang/Object", 1}, {"javax/microedition/media/Manager", "java/lang/Object", 0}, {"javax/microedition/media/PlayerListener", "java/lang/Object", 0},
   {"java/lang/Object", 0, 0}, {"java/lang/Class", "java/lang/Object", 1}, {"java/lang/Thread", "java/lang/Object", 3},
   {"java/lang/IllegalMonitorStateException", "java/lang/RuntimeException", 0}, {"java/lang/IllegalThreadStateException", "java/lang/IllegalArgumentException", 0}, {"java/lang/Throwable", "java/lang/Object", 2}, {"java/lang/Exception", "java/lang/Throwable", 0},
   {"java/lang/Error", "java/lang/Throwable", 0}, {"java/lang/RuntimeException", "java/lang/Exception", 0},
