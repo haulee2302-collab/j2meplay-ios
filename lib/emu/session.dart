@@ -264,7 +264,7 @@ class EmuSession extends ChangeNotifier {
       final head = utf8.decode(d.sublist(0, sep < 0 ? d.length : sep), allowMalformed: true).split('\n');
       final body = sep < 0 ? Uint8List(0) : d.sublist(sep + 2);
       id = int.parse(head[0]);
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
       try {
         final req = await client.openUrl(head[1], Uri.parse(head[2]));
         var ua = false;
@@ -277,7 +277,7 @@ class EmuSession extends ChangeNotifier {
         }
         if (!ua) req.headers.set('User-Agent', 'Profile/MIDP-2.0 Configuration/CLDC-1.1');
         if (body.isNotEmpty) req.add(body);
-        final res = await req.close().timeout(const Duration(seconds: 25));
+        final res = await req.close().timeout(const Duration(seconds: 12));
         final bb = BytesBuilder(copy: false);
         await for (final ch in res) {
           bb.add(ch);

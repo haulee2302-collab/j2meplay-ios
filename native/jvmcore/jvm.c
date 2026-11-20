@@ -268,6 +268,8 @@ static void traceHere(const char *what, const char *msg) {
 #define gTop (curT->top)
 static int monEnter(void *o, int force);
 static int g_yield, g_budget, nestDepth;
+int g_retry; // native yêu cầu chạy lại lệnh gọi sau ms mili giây (chờ không chặn các luồng khác)
+int vmRetry(int ms);
 #define BUDGET 4000
 
 static int ensureInit(Class *c, Slot *sp) {
@@ -567,6 +569,7 @@ static int interp(int base) {
       }
       Slot *a = sp - tm->argSlots; gTop = sp; SAVE();
       tm->native(a);
+      if (g_retry) { g_retry = 0; sp = a + tm->argSlots; SAVE(); return 1; }
       if (g_exc) { sp = a; UNWIND(); }
       sp = a + tm->retSlots; pc += ilen;
       if (g_yield) { g_yield = 0; SAVE(); return 1; }
@@ -716,6 +719,7 @@ static void th_start(Slot *a) {
   if (!rm || rm->native) { throwNew("java/lang/RuntimeException", "Thread.run"); return; }
   Thread *t = newThread(rm, &arg, 1, to); to->f[1].a = t;
 }
+int vmRetry(int ms) { if (nestDepth || !curT) return 0; g_retry = 1; curT->state = TS_SLEEP; curT->wakeAt = nowMs() + ms; return 1; }
 static void th_join(Slot *a) { Thread *t = ((Obj *)a[0].a)->f[1].a; if (!t || t->state == TS_DONE || nestDepth) return; curT->state = TS_JOIN; curT->joinTarget = t; g_yield = 1; }
 static void th_joinJ(Slot *a) { th_join(a); }
 static void th_sleep(Slot *a) {
