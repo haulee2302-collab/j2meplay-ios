@@ -266,6 +266,11 @@ class EmuSession extends ChangeNotifier {
         }
       }
       if (any) _presentCore();
+      for (var i = 0; i < 64; i++) {
+        final sm = core.sockPoll();
+        if (sm == null) break;
+        _sockCmd(core, sm);
+      }
       final nq = core.netPoll();
       if (nq != null) unawaited(_netRequest(core, nq));
       final uj = core.uiPoll();
@@ -303,6 +308,51 @@ class EmuSession extends ChangeNotifier {
       }
     } finally {
       _pumping = false;
+    }
+  }
+
+  final Map<int, Socket> _socks = {};
+
+  void _sockCmd(JvmCore core, Uint8List m) {
+    final k = m[0];
+    final id = (m[1] << 24) | (m[2] << 16) | (m[3] << 8) | m[4];
+    final data = Uint8List.sublistView(m, 5);
+    if (k == 0x4f) {
+      final hp = utf8.decode(data, allowMalformed: true);
+      final c = hp.lastIndexOf(':');
+      final host = hp.substring(0, c), port = int.tryParse(hp.substring(c + 1)) ?? 0;
+      Socket.connect(host, port, timeout: const Duration(seconds: 15)).then((so) {
+        if (_core != core) {
+          so.destroy();
+          return;
+        }
+        so.setOption(SocketOption.tcpNoDelay, true);
+        _socks[id] = so;
+        core.sockEvent(id, 1);
+        so.listen(
+          (d) {
+            if (_core == core) core.sockEvent(id, 2, Uint8List.fromList(d));
+          },
+          onDone: () {
+            _socks.remove(id);
+            if (_core == core) core.sockEvent(id, 3);
+          },
+          onError: (_) {
+            _socks.remove(id);
+            if (_core == core) core.sockEvent(id, 4);
+          },
+          cancelOnError: true,
+        );
+      }).catchError((Object e) {
+        _log('Socket lỗi $hp: $e');
+        if (_core == core) core.sockEvent(id, 4);
+      });
+    } else if (k == 0x57) {
+      try {
+        _socks[id]?.add(data);
+      } catch (_) {}
+    } else if (k == 0x43) {
+      _socks.remove(id)?.destroy();
     }
   }
 
@@ -479,6 +529,10 @@ class EmuSession extends ChangeNotifier {
       _rend?.close();
       _rend = null;
       JvmCore.markRunning(false);
+      for (final so in _socks.values) {
+        so.destroy();
+      }
+      _socks.clear();
     }
     midp?.destroy();
     vm?.stop();

@@ -51,7 +51,7 @@ void regNative(const char *cls, const char *name, const char *desc, int isStatic
 // ---------------- lớp có sẵn ----------------
 typedef struct { const char *name, *super; int nInst; } BDef;
 static const BDef bdefs[] = {
-  {"java/util/Timer", "java/lang/Object", 1}, {"java/util/TimerTask", "java/lang/Object", 1}, {"javax/microedition/media/MediaException", "java/io/IOException", 0}, {"javax/microedition/media/Control", "java/lang/Object", 0}, {"javax/microedition/media/control/VolumeControl", "javax/microedition/media/Control", 0}, {"javax/microedition/media/Player", "java/lang/Object", 1}, {"javax/microedition/media/Manager", "java/lang/Object", 0}, {"javax/microedition/media/PlayerListener", "java/lang/Object", 0},
+  {"java/util/Timer", "java/lang/Object", 1}, {"javax/microedition/io/StreamConnection", "java/lang/Object", 1}, {"javax/microedition/io/SocketConnection", "javax/microedition/io/StreamConnection", 1}, {"javax/microedition/io/SockIn", "java/io/InputStream", 1}, {"javax/microedition/io/SockOut", "java/io/OutputStream", 1}, {"java/util/TimerTask", "java/lang/Object", 1}, {"javax/microedition/media/MediaException", "java/io/IOException", 0}, {"javax/microedition/media/Control", "java/lang/Object", 0}, {"javax/microedition/media/control/VolumeControl", "javax/microedition/media/Control", 0}, {"javax/microedition/media/Player", "java/lang/Object", 1}, {"javax/microedition/media/Manager", "java/lang/Object", 0}, {"javax/microedition/media/PlayerListener", "java/lang/Object", 0},
   {"java/lang/Object", 0, 0}, {"java/lang/Class", "java/lang/Object", 1}, {"java/lang/Thread", "java/lang/Object", 3},
   {"java/lang/IllegalMonitorStateException", "java/lang/RuntimeException", 0}, {"java/lang/IllegalThreadStateException", "java/lang/IllegalArgumentException", 0}, {"java/lang/Throwable", "java/lang/Object", 2}, {"java/lang/Exception", "java/lang/Throwable", 0},
   {"java/lang/Error", "java/lang/Throwable", 0}, {"java/lang/RuntimeException", "java/lang/Exception", 0},
@@ -569,8 +569,8 @@ static int interp(int base) {
         sp -= tm->argSlots; if (tm->retSlots) { sp->l = 0; sp += tm->retSlots; } pc += ilen; NEXT;
       }
       Slot *a = sp - tm->argSlots; gTop = sp; SAVE();
-      tm->native(a);
-      if (g_retry) { g_retry = 0; sp = a + tm->argSlots; SAVE(); return 1; }
+      Slot a0 = a[0]; tm->native(a);
+      if (g_retry) { g_retry = 0; a[0] = a0; sp = a + tm->argSlots; SAVE(); return 1; }
       if (g_exc) { sp = a; UNWIND(); }
       sp = a + tm->retSlots; pc += ilen;
       if (g_yield) { g_yield = 0; SAVE(); return 1; }
@@ -899,6 +899,8 @@ EXPORT int jvmcore_ui_poll(char *buf, int cap) { return midpUiPoll(buf, cap); }
 EXPORT void jvmcore_ui_action(const char *s) { midpUiAction(s); }
 void midpSetDraw(int on);
 EXPORT void jvmcore_set_draw(int on) { midpSetDraw(on); }
+EXPORT int jvmcore_sock_poll(uint8_t *b, int cap) { return midpSockPoll(b, cap); }
+EXPORT void jvmcore_sock_event(int id, int kind, const uint8_t *d, int n) { midpSockEvent(id, kind, d, n); }
 EXPORT void jvmcore_refresh(void) { midpForceKey(); }
 EXPORT void jvmcore_key(int type, int code) { midpKey(type, code); }
 EXPORT void jvmcore_pointer(int type, int x, int y) { midpPointer(type, x, y); }

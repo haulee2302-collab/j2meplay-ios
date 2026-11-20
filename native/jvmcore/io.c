@@ -19,6 +19,7 @@ uint8_t *loadResource(const char *name, int *len) { return (g_resLoader ? g_resL
 
 static Class *baisCls, *baosCls, *istCls;
 void ioReset(void) { baisCls = baosCls = istCls = 0; }
+Class *g_sockInCls, *g_sockOutCls; int (*g_sockWait)(Obj *, int); int (*g_sockTake)(Obj *, uint8_t *, int, int); void (*g_sockPut)(Obj *, const uint8_t *, int);
 static Class *cBAIS(void) { return baisCls ? baisCls : (baisCls = loadClass("java/io/ByteArrayInputStream")); }
 static Class *cBAOS(void) { return baosCls ? baosCls : (baosCls = loadClass("java/io/ByteArrayOutputStream")); }
 
@@ -50,11 +51,13 @@ static void ist_markSup(Slot *a) { a[0].i = 1; }
 static int istRead1(Obj *in) {
   if (!in) { throwNew("java/lang/NullPointerException", 0); return -1; }
   if (in->cls == cBAIS()) { Arr *b = in->f[0].a; return in->f[1].i < in->f[2].i ? b->d[in->f[1].i++] : -1; }
+  if (in->cls == g_sockInCls) { if (!g_sockWait(in, 1)) return -1; uint8_t b; return g_sockTake(in, &b, 1, 0) > 0 ? b : -1; }
   Method *m = findMethod(in->cls, "read", "()I"); if (!m) { throwNew("java/io/IOException", "read"); return -1; }
   Slot ar[1]; ar[0].a = in; Slot r = callMethod(m, ar, 1); return g_exc ? -1 : r.i;
 }
 static int istReadN(Obj *in, Arr *dst, int off, int n) {
   if (in->cls == cBAIS()) return baisReadN(in, dst, off, n);
+  if (in->cls == g_sockInCls) { if (n == 0) return 0; if (!g_sockWait(in, 1)) return -1; int k = g_sockTake(in, dst->d + off, n, 0); return k > 0 ? k : -1; }
   int got = 0;
   while (got < n) { int c = istRead1(in); if (g_exc) return -1; if (c < 0) break; dst->d[off + got++] = (uint8_t)c; }
   return got == 0 && n > 0 ? -1 : got;
@@ -74,6 +77,7 @@ static int dRead(Slot *a) { return istRead1(under(a)); }
 static int readBytes(Slot *a, uint8_t *out, int n) {
   Obj *u = under(a);
   if (u->cls == cBAIS()) { Arr *b = u->f[0].a; if (u->f[2].i - u->f[1].i < n) { u->f[1].i = u->f[2].i; throwNew("java/io/EOFException", 0); return 0; } memcpy(out, b->d + u->f[1].i, n); u->f[1].i += n; return 1; }
+  if (u->cls == g_sockInCls) { if (!g_sockWait(u, n)) return 0; if (g_sockTake(u, out, n, 0) < n) { throwNew("java/io/EOFException", 0); return 0; } return 1; }
   for (int i = 0; i < n; i++) { int c = istRead1(u); if (g_exc) return 0; if (c < 0) { throwNew("java/io/EOFException", 0); return 0; } out[i] = (uint8_t)c; }
   return 1;
 }
@@ -98,6 +102,7 @@ static void dis_readJ(Slot *a) { uint8_t b[8]; if (!readBytes(a, b, 8)) return; 
 static void dis_readF(Slot *a) { uint8_t b[4]; if (!readBytes(a, b, 4)) return; uint32_t v = ((uint32_t)b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]; memcpy(&a[0].f, &v, 4); }
 static void dis_readD(Slot *a) { uint8_t b[8]; if (!readBytes(a, b, 8)) return; uint64_t v = 0; for (int i = 0; i < 8; i++) v = (v << 8) | b[i]; memcpy(&a[0].d, &v, 8); }
 static void dis_readUTF(Slot *a) {
+  { Obj *u = under(a); if (u->cls == g_sockInCls) { uint8_t pk[2]; if (!g_sockWait(u, 2)) return; if (g_sockTake(u, pk, 2, 1) == 2 && !g_sockWait(u, 2 + ((pk[0] << 8) | pk[1]))) return; } }
   uint8_t h[2]; if (!readBytes(a, h, 2)) return; int n = (h[0] << 8) | h[1];
   uint8_t *b = malloc(n + 1); if (!readBytes(a, b, n)) { free(b); return; }
   uint16_t *c = malloc((n + 1) * 2); int k = 0;
@@ -131,6 +136,7 @@ static void baos_toStr(Slot *a) { Obj *o = OBJ(0); char *t = malloc(o->f[1].i + 
 static void ostWrite(Obj *out, const uint8_t *d, int n) {
   if (!out) { throwNew("java/lang/NullPointerException", 0); return; }
   if (out->cls == cBAOS()) { baosPut(out, d, n); return; }
+  if (out->cls == g_sockOutCls) { g_sockPut(out, d, n); return; }
   Method *m = findMethod(out->cls, "write", "(I)V"); if (!m) { throwNew("java/io/IOException", "write"); return; }
   for (int i = 0; i < n; i++) { Slot ar[2]; ar[0].a = out; ar[1].i = d[i]; callMethod(m, ar, 2); if (g_exc) return; }
 }

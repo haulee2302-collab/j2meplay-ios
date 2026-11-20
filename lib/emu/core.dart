@@ -87,7 +87,8 @@ class JvmCore {
   final Pointer<Utf8> Function() _log;
   final int Function(Pointer<Uint8>, int) _uiPoll;
   final void Function(Pointer<Utf8>) _uiAct;
-  final int Function(Pointer<Uint8>, int) _netPoll;
+  final int Function(Pointer<Uint8>, int) _netPoll, _sockPoll;
+  final void Function(int, int, Pointer<Uint8>, int) _sockEvent;
   final void Function(int, int, Pointer<Uint8>, int, Pointer<Uint8>, int) _netDone;
   Pointer<Uint8> _nbuf = malloc<Uint8>(1 << 16);
   int _ncap = 1 << 16;
@@ -109,6 +110,8 @@ class JvmCore {
         _log = l.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>('jvmcore_log'),
         _uiPoll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_ui_poll'),
         _uiAct = l.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('jvmcore_ui_action'),
+        _sockPoll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_sock_poll'),
+        _sockEvent = l.lookupFunction<Void Function(Int32, Int32, Pointer<Uint8>, Int32), void Function(int, int, Pointer<Uint8>, int)>('jvmcore_sock_event'),
         _netPoll = l.lookupFunction<Int32 Function(Pointer<Uint8>, Int32), int Function(Pointer<Uint8>, int)>('jvmcore_net_poll'),
         _netDone = l.lookupFunction<Void Function(Int32, Int32, Pointer<Uint8>, Int32, Pointer<Uint8>, Int32), void Function(int, int, Pointer<Uint8>, int, Pointer<Uint8>, int)>('jvmcore_net_done');
 
@@ -182,6 +185,35 @@ class JvmCore {
       if (n <= 0) return null;
     }
     return Uint8List.fromList(_nbuf.asTypedList(n));
+  }
+
+  Pointer<Uint8> _sbuf = malloc<Uint8>(70000);
+  int _scap = 70000;
+
+  /// Thao tác socket do game phát ra (null nếu chưa có): byte đầu 'O' (mở host:port) / 'W' (ghi) / 'C' (đóng), 4 byte id, rồi dữ liệu.
+  Uint8List? sockPoll() {
+    var n = _sockPoll(_sbuf, _scap);
+    if (n == 0) return null;
+    if (n < 0) {
+      malloc.free(_sbuf);
+      _scap = -n + 1024;
+      _sbuf = malloc<Uint8>(_scap);
+      n = _sockPoll(_sbuf, _scap);
+      if (n <= 0) return null;
+    }
+    return Uint8List.fromList(_sbuf.asTypedList(n));
+  }
+
+  /// Báo cho lõi: kind 1 đã nối, 2 có dữ liệu, 3 đóng, 4 lỗi.
+  void sockEvent(int id, int kind, [Uint8List? data]) {
+    final d = data ?? Uint8List(0);
+    final b = malloc<Uint8>(d.length + 1);
+    try {
+      b.asTypedList(d.length).setAll(0, d);
+      _sockEvent(id, kind, b, d.length);
+    } finally {
+      malloc.free(b);
+    }
   }
 
   /// Trả kết quả HTTP về lõi (status <= 0 = lỗi kết nối).

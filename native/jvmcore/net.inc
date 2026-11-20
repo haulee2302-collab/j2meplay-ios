@@ -51,8 +51,11 @@ static Obj *hcNew(Obj *urlS, int withBody) {
   snprintf(h->url, sizeof h->url, "%s", u); snprintf(h->method, sizeof h->method, "GET"); o->f[0].a = h; (void)withBody; return o;
 }
 static int isHttp(Obj *s) { char u[16]; cstr(s, u, sizeof u); return !strncmp(u, "http://", 7) || !strncmp(u, "https://", 8); }
+static int isSock(Obj *s);
+static void sock_open(Slot *a);
 static void con_open(Slot *a) {
   Obj *u = OBJ(0); if (!u) { throwNew("java/lang/IllegalArgumentException", "url null"); return; }
+  if (isSock(u)) { sock_open(a); return; }
   if (!isHttp(u)) { char b[120]; cstr(u, b, sizeof b); throwNew("javax/microedition/io/ConnectionNotFoundException", b); return; }
   a[0].a = hcNew(u, 0);
 }

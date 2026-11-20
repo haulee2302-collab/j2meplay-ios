@@ -64,3 +64,11 @@ int midpNetPoll(uint8_t *buf, int cap);
 void midpNetDone(int id, int status, const uint8_t *hdr, int hlen, const uint8_t *body, int blen);
 extern int g_retry;
 int vmRetry(int ms);
+
+// Socket (sock.inc) – io.c dùng các con trỏ này để đọc/ghi luồng socket
+extern Class *g_sockInCls, *g_sockOutCls;
+extern int (*g_sockWait)(Obj *, int);
+extern int (*g_sockTake)(Obj *, uint8_t *, int, int);
+extern void (*g_sockPut)(Obj *, const uint8_t *, int);
+int midpSockPoll(uint8_t *buf, int cap);
+void midpSockEvent(int id, int kind, const uint8_t *d, int n);
