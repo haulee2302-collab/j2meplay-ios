@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../game/connection.dart';
 import '../game/jpc.dart';
@@ -53,6 +54,17 @@ class EmuSession extends ChangeNotifier {
   final ValueNotifier<ui.Image?> frame = ValueNotifier(null);
   // Màn hình List/Form/TextBox/Alert do lõi C mô tả (null = đang ở màn hình vẽ bằng khung hình).
   final ValueNotifier<Map<String, dynamic>?> screen = ValueNotifier(null);
+  /// Lệnh (Command) của Canvas, hiện thành thanh phím mềm.
+  final ValueNotifier<List<dynamic>?> softkeys = ValueNotifier(null);
+  /// Danh sách MIDlet cần người dùng chọn (JAR có nhiều MIDlet).
+  final ValueNotifier<List<(String, String)>?> choices = ValueNotifier(null);
+  Completer<String>? _choose;
+  void chooseMidlet(String cls) {
+    choices.value = null;
+    _choose?.complete(cls);
+    _choose = null;
+  }
+  String get _midletPref => 'midlet_${inst.jarId}';
   bool _uiSeen = false;
   void uiAct(String s) => _core?.uiAction(s);
   // Lõi C (thử nghiệm): khung hình JPC1 do native/jvmcore phát, vẽ bằng JpcRenderer của phiên thuê.
@@ -166,13 +178,28 @@ class EmuSession extends ChangeNotifier {
         return false;
       }
       final rms = '$base/rms_core_$jarId';
-      final rc = core.start(prep.dir, prep.midlet, rms, inst.width, inst.height);
+      var midlet = prep.midlet;
+      if (prep.all.length > 1) {
+        final sp = await SharedPreferences.getInstance();
+        final saved = sp.getString(_midletPref);
+        if (saved != null && prep.all.any((e) => e.$2 == saved)) {
+          midlet = saved;
+        } else {
+          _choose = Completer<String>();
+          choices.value = prep.all;
+          _set('Chọn MIDlet để chạy');
+          midlet = await _choose!.future;
+          await sp.setString(_midletPref, midlet);
+        }
+      }
+      final rc = core.start(prep.dir, midlet, rms, inst.width, inst.height);
       if (rc != 0) {
         coreNote = 'Lõi C đang bận (mã $rc)';
         _log(coreNote);
         return false;
       }
       _core = core;
+      JvmCore.markRunning(true);
       _rend = JpcRenderer();
       _coreMode = true;
       _coreEnded = false;
@@ -207,6 +234,7 @@ class EmuSession extends ChangeNotifier {
     _rend?.close();
     _rend = null;
     _coreMode = false;
+    JvmCore.markRunning(false);
     notifyListeners();
     await start(forceDart: true);
   }
@@ -239,8 +267,14 @@ class EmuSession extends ChangeNotifier {
           final m = jsonDecode(uj) as Map<String, dynamic>;
           if (m['kind'] == 'none') {
             screen.value = null;
+            softkeys.value = null;
             core.refresh();
+          } else if (m['kind'] == 'softkeys') {
+            if (screen.value != null) core.refresh();
+            screen.value = null;
+            softkeys.value = m['commands'] as List<dynamic>;
           } else {
+            softkeys.value = null;
             _uiSeen = true;
             screen.value = m;
           }
@@ -381,6 +415,15 @@ class EmuSession extends ChangeNotifier {
     });
   }
 
+  bool get usesCore => _coreMode;
+
+  /// Quên MIDlet đã chọn để chọn lại khi khởi động lần sau.
+  Future<void> forgetMidlet() async {
+    try {
+      await (await SharedPreferences.getInstance()).remove(_midletPref);
+    } catch (_) {}
+  }
+
   void resume() {
     if (_coreMode) {
       _core?.refresh();
@@ -421,12 +464,14 @@ class EmuSession extends ChangeNotifier {
     _timer?.cancel();
     _watch?.cancel();
     screen.value = null;
+    softkeys.value = null;
     if (_coreMode) {
       _coreMode = false;
       _core?.stop();
       _core = null;
       _rend?.close();
       _rend = null;
+      JvmCore.markRunning(false);
     }
     midp?.destroy();
     vm?.stop();

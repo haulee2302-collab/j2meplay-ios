@@ -18,9 +18,27 @@ class JvmCore {
   static bool enabled = false;
   static String lastError = '';
 
+  static const runKey = 'emu_core_running';
+  /// Lần chạy trước app thoát đột ngột khi lõi C đang chạy: đã tự tắt lõi C. Hiện một lần rồi xoá.
+  static String crashNotice = '';
+
   static Future<void> load() async {
     try {
-      enabled = (await SharedPreferences.getInstance()).getBool(prefKey) ?? false;
+      final sp = await SharedPreferences.getInstance();
+      enabled = sp.getBool(prefKey) ?? false;
+      if (enabled && (sp.getBool(runKey) ?? false)) {
+        enabled = false;
+        await sp.setBool(prefKey, false);
+        crashNotice = 'Lần trước app thoát đột ngột khi đang dùng lõi C, đã tự tắt lõi C. Có thể bật lại trong menu công cụ.';
+      }
+      await sp.setBool(runKey, false);
+    } catch (_) {}
+  }
+
+  /// Đánh dấu "lõi C đang chạy ở màn hình chính": nếu app chết khi dấu này còn bật thì lần sau tự tắt lõi C.
+  static Future<void> markRunning(bool v) async {
+    try {
+      await (await SharedPreferences.getInstance()).setBool(runKey, v);
     } catch (_) {}
   }
 
@@ -187,7 +205,7 @@ class JvmCore {
 }
 
 /// Giải nén JAR ra thư mục (một lần cho mỗi JAR) để lõi C nạp lớp và tài nguyên trực tiếp từ tệp.
-Future<({String dir, String midlet})?> prepareJar(Uint8List bytes, String root, String stamp) async {
+Future<({String dir, String midlet, List<(String, String)> all})?> prepareJar(Uint8List bytes, String root, String stamp) async {
   final dir = Directory(root);
   final mark = File('$root/.ok');
   if (!(await mark.exists()) || (await mark.readAsString()) != stamp) {
@@ -198,9 +216,10 @@ Future<({String dir, String midlet})?> prepareJar(Uint8List bytes, String root, 
   }
   final mf = File('$root/META-INF/MANIFEST.MF');
   if (!await mf.exists()) return null;
-  final cls = midletOf(await mf.readAsString());
+  final text = await mf.readAsString();
+  final cls = midletOf(text);
   if (cls == null) return null;
-  return (dir: root, midlet: cls);
+  return (dir: root, midlet: cls, all: midletsOf(text));
 }
 
 void _extract(List<dynamic> a) {
@@ -216,6 +235,28 @@ void _extract(List<dynamic> a) {
       o.writeAsBytesSync(f.content as List<int>);
     }
   }
+}
+
+/// Mọi MIDlet khai báo trong MANIFEST (MIDlet-1, MIDlet-2, ...): (tên, lớp dạng 'a/b/C').
+List<(String, String)> midletsOf(String manifest) {
+  final lines = <String>[];
+  for (final raw in const LineSplitter().convert(manifest)) {
+    if (raw.startsWith(' ') && lines.isNotEmpty) {
+      lines[lines.length - 1] += raw.substring(1);
+    } else {
+      lines.add(raw);
+    }
+  }
+  final out = <int, (String, String)>{};
+  final re = RegExp(r'^midlet-(\d+):', caseSensitive: false);
+  for (final l in lines) {
+    final m = re.firstMatch(l);
+    if (m == null) continue;
+    final parts = l.substring(m.end).split(',');
+    if (parts.length >= 3) out[int.parse(m.group(1)!)] = (parts[0].trim(), parts[2].trim().replaceAll('.', '/'));
+  }
+  final keys = out.keys.toList()..sort();
+  return [for (final k in keys) out[k]!];
 }
 
 /// Lớp MIDlet đầu tiên trong MANIFEST (MIDlet-1: Tên, biểu tượng, lớp), dạng 'a/b/C'.

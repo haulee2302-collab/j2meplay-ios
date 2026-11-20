@@ -383,7 +383,7 @@ static int startEvent(Ev *e) {
     case EK_PM: if (!isCanvas(cv)) return 0; m = findMethod(cv->cls, "pointerDragged", "(II)V"); ar[0].a = cv; ar[1].i = e->a; ar[2].i = e->b; n = 3; break;
     case EK_SERIAL: m = findMethod(e->o->cls, "run", "()V"); ar[0].a = e->o; n = 1; break;
     case EK_SHOW: if (!isCanvas(e->o)) return 0; m = findMethod(e->o->cls, "showNotify", "()V"); ar[0].a = e->o; n = 1; break;
-    case EK_CMD: { if (!e->o || isCanvas(e->o)) return 0; UiD *u = ud(e->o, 0); Obj *cmd = e->a < 0 ? (u->selCmd ? u->selCmd : (Obj *)loadClass(LCD "List")->statics[0].a) : (e->a < u->ncmd ? u->cmd[e->a] : 0); Obj *l = e->o->f[D_LISTENER].a; if (!l || !cmd) return 0;
+    case EK_CMD: { if (!e->o) return 0; UiD *u = ud(e->o, 0); Obj *cmd = e->a < 0 ? (u->selCmd ? u->selCmd : (Obj *)loadClass(LCD "List")->statics[0].a) : (e->a < u->ncmd ? u->cmd[e->a] : 0); Obj *l = e->o->f[D_LISTENER].a; if (!l || !cmd) return 0;
       m = findMethod(l->cls, "commandAction", "(Ljavax/microedition/lcdui/Command;Ljavax/microedition/lcdui/Displayable;)V"); ar[0].a = l; ar[1].a = cmd; ar[2].a = e->o; n = 3; break; }
     case EK_ITEM: { if (!e->o) return 0; UiD *u = ud(e->o, 0); Obj *l = u->stateL; if (!l || e->a >= u->nit) return 0; m = findMethod(l->cls, "itemStateChanged", "(Ljavax/microedition/lcdui/Item;)V"); ar[0].a = l; ar[1].a = u->items[e->a]; n = 2; break; }
     default: return 0;

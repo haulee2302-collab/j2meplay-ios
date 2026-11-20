@@ -181,6 +181,7 @@ static void jChoice(JB *j, Choice *c, int withIdx) {
 }
 static char *uiJson(int *len) {
   JB j = {0}; Obj *d = g_cur; UiD *u = d && !isCanvas(d) ? ud(d, 0) : 0;
+  if (d && isCanvas(d)) { UiD *cu = ud(d, 0); if (cu->ncmd > 0) { js(&j, "{\"kind\":\"softkeys\",\"id\":"); ji(&j, cu->id); jCmds(&j, cu); jc(&j, '}'); *len = j.n; jc(&j, 0); return j.b; } }
   if (!u || !u->kind) { js(&j, "{\"kind\":\"none\"}"); *len = j.n; jc(&j, 0); return j.b; }
   js(&j, "{\"id\":"); ji(&j, u->id); js(&j, ",\"title\":"); jstr(&j, u->title);
   if (u->kind == 1) { js(&j, ",\"kind\":\"list\",\"choiceType\":"); ji(&j, u->ch.type); js(&j, ",\"selectedIndex\":"); ji(&j, chSelIdx(&u->ch)); jc(&j, ','); jChoice(&j, &u->ch, 1); jCmds(&j, u); }
@@ -226,7 +227,9 @@ static Obj *utf8Str(const char *s) {
 }
 static void uiFire(Obj *scr, Obj *cmd, int idx) { evPush(EK_CMD, idx, 0, scr); (void)cmd; }
 static void uiApply(const char *s) {
-  Obj *d = g_cur; if (!d || isCanvas(d)) return; UiD *u = ud(d, 0); if (!u->kind) return;
+  Obj *d = g_cur; if (!d) return;
+  if (isCanvas(d)) { if (s[0] == 'K') { UiD *cu = ud(d, 0); int i = atoi(s + 1); if (i >= 0 && i < cu->ncmd) uiFire(d, cu->cmd[i], i); } return; }
+  UiD *u = ud(d, 0); if (!u->kind) return;
   switch (s[0]) {
     case 'K': { int i = atoi(s + 1); if (i >= 0 && i < u->ncmd) uiFire(d, u->cmd[i], i); if (u->kind == 4 && (u->ncmd == 0 || 1) && i >= 0) { /* lệnh của Alert: giữ nguyên */ } break; }
     case 'D': if (u->kind == 4 && u->next) { uiSwitch(u->next, 0); } break;

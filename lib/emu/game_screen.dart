@@ -101,6 +101,13 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
     s.addListener(_t);
     s.frame.addListener(_t);
     SharedPrefsLite.load().then((v) { if (mounted) setState(() => showPad = v); });
+    if (JvmCore.crashNotice.isNotEmpty) {
+      final msg = JvmCore.crashNotice;
+      JvmCore.crashNotice = '';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 8)));
+      });
+    }
   }
 
   void _t() { if (mounted) setState(() {}); }
@@ -232,6 +239,51 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                                 ]),
                               ),
                             ),
+                            ValueListenableBuilder<List<(String, String)>?>(
+                              valueListenable: s.choices,
+                              builder: (_, c, __) => c == null
+                                  ? const SizedBox.shrink()
+                                  : Container(
+                                      color: Jp.surface,
+                                      padding: const EdgeInsets.all(14),
+                                      child: ListView(children: [
+                                        const Padding(padding: EdgeInsets.only(bottom: 10), child: Text('JAR này có nhiều MIDlet. Chọn một để chạy:', style: TextStyle(fontWeight: FontWeight.w700))),
+                                        for (final e in c) Padding(padding: const EdgeInsets.only(bottom: 8), child: OutlinedButton(onPressed: () => s.chooseMidlet(e.$2), child: Text(e.$1.isEmpty ? e.$2 : e.$1))),
+                                      ]),
+                                    ),
+                            ),
+                            ValueListenableBuilder<List<dynamic>?>(
+                              valueListenable: s.softkeys,
+                              builder: (_, c, __) => c == null || c.isEmpty
+                                  ? const SizedBox.shrink()
+                                  : Positioned(
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        color: const Color(0xB3000000),
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                        child: Wrap(alignment: WrapAlignment.spaceBetween, children: [
+                                          for (final k in c)
+                                            TextButton(
+                                              style: TextButton.styleFrom(foregroundColor: Colors.white, minimumSize: const Size(48, 32), padding: const EdgeInsets.symmetric(horizontal: 10)),
+                                              onPressed: () => s.uiAct('K${(k as Map)['index']}'),
+                                              child: Text('${k['label']}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                                            ),
+                                        ]),
+                                      ),
+                                    ),
+                            ),
+                            if (s.noDraw)
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(color: const Color(0xB3000000), borderRadius: BorderRadius.circular(6)),
+                                  child: const Text('Vẽ giả: chỉ chạy logic', style: TextStyle(color: Colors.white, fontSize: 11)),
+                                ),
+                              ),
                           ]);
                         }),
                       ),
@@ -249,6 +301,7 @@ class _LocalGameScreenState extends State<LocalGameScreen> {
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
                       _toolItem(Pip.enabled ? 'Tắt hình trong hình' : 'Bật hình trong hình', JpIcons.screen, _togglePip),
                       _toolItem('Khởi động lại', JpIcons.restart2, _restart),
+                      if (s.usesCore) _toolItem('Chọn MIDlet khác', JpIcons.tune, () async { await s.forgetMidlet(); _restart(); }),
                       _toolItem(JvmCore.enabled ? 'Tắt lõi C (thử nghiệm)' : 'Bật lõi C (thử nghiệm)', JpIcons.tune, _toggleCore),
                       _toolItem(s.noDraw ? 'Bật vẽ hình' : 'Vẽ giả (như server, chỉ chạy logic)', JpIcons.screen, () => s.setNoDraw(!s.noDraw)),
                       _toolItem('Cấu hình', JpIcons.tune, _config),

@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/widgets.dart';
 import 'package:jp_pip/jp_pip.dart';
 
+import 'core.dart';
 import 'session.dart';
 
 /// Giữ app chạy khi chuyển sang app khác (iOS): phát âm thanh im lặng ở chế độ nền "audio"
@@ -26,6 +27,8 @@ class BgKeep with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
     active = s == AppLifecycleState.resumed;
+    // Dấu "lõi C đang chạy" chỉ có nghĩa khi app ở foreground (iOS có thể tự đóng app nền).
+    JvmCore.markRunning(active && EmuRuntime.sessions.values.any((e) => e.usesCore));
     _notice();
     if (active) {
       for (final e in EmuRuntime.sessions.values) {
