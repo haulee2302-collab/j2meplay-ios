@@ -124,6 +124,7 @@ static void st_indexOfSI(Slot *a) { a[0].i = idxOfStr(STR(0), STR(1), a[2].i); }
 static void st_startsWith(Slot *a) { Obj *s = STR(0), *t = STR(1); a[0].i = S_LEN(t) <= S_LEN(s) && !memcmp(S_CH(s), S_CH(t), S_LEN(t) * 2); }
 static void st_endsWith(Slot *a) { Obj *s = STR(0), *t = STR(1); a[0].i = S_LEN(t) <= S_LEN(s) && !memcmp(S_CH(s) + S_LEN(s) - S_LEN(t), S_CH(t), S_LEN(t) * 2); }
 static void st_concat(Slot *a) { Obj *s = STR(0), *t = STR(1); uint16_t *b = malloc((S_LEN(s) + S_LEN(t) + 1) * 2); memcpy(b, S_CH(s), S_LEN(s) * 2); memcpy(b + S_LEN(s), S_CH(t), S_LEN(t) * 2); a[0].a = newStr16(b, S_LEN(s) + S_LEN(t)); free(b); }
+static void fn_self(Slot *a) { (void)a; }
 static void st_trim(Slot *a) { Obj *s = STR(0); int b = 0, e = S_LEN(s); while (b < e && S_CH(s)[b] <= ' ') b++; while (e > b && S_CH(s)[e - 1] <= ' ') e--; a[0].a = newStr16(S_CH(s) + b, e - b); }
 static void st_lower(Slot *a) { Obj *s = STR(0); Obj *r = newStr16(S_CH(s), S_LEN(s)); for (int i = 0; i < S_LEN(r); i++) { uint16_t c = S_CH(r)[i]; if (c >= 'A' && c <= 'Z') S_CH(r)[i] = c + 32; } a[0].a = r; }
 static void st_upper(Slot *a) { Obj *s = STR(0); Obj *r = newStr16(S_CH(s), S_LEN(s)); for (int i = 0; i < S_LEN(r); i++) { uint16_t c = S_CH(r)[i]; if (c >= 'a' && c <= 'z') S_CH(r)[i] = c - 32; } a[0].a = r; }
@@ -337,6 +338,7 @@ void installNatives(void) {
     snprintf(d[9], sizeof d[9], "(ILjava/lang/String;)%s", rd); NI(c, "insert", strdup(d[9]), sb_insertS);
   }
   const char *I = "java/lang/Integer", *L = "java/lang/Long", *C = "java/lang/Character";
+  NI(S, "intern", "()Ljava/lang/String;", fn_self); NS("java/lang/Byte", "parseByte", "(Ljava/lang/String;)B", in_parse);
   NS(I, "parseInt", "(Ljava/lang/String;)I", in_parse); NS(I, "parseInt", "(Ljava/lang/String;I)I", in_parseR); NS(I, "valueOf", "(Ljava/lang/String;)Ljava/lang/Integer;", in_valueOfS);
   NS(I, "valueOf", "(I)Ljava/lang/Integer;", in_valueOfI); NI(I, "<init>", "(I)V", in_initI); NI(I, "intValue", "()I", in_intValue); NI(I, "longValue", "()J", in_longValue);
   NS(I, "toString", "(I)Ljava/lang/String;", in_toStringS); NI(I, "toString", "()Ljava/lang/String;", in_toString); NI(I, "equals", "(Ljava/lang/Object;)Z", in_equals); NI(I, "hashCode", "()I", in_hash);

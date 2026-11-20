@@ -63,7 +63,7 @@ static const BDef bdefs[] = {
   {"java/io/IOException", "java/lang/Exception", 0}, {"java/lang/OutOfMemoryError", "java/lang/Error", 0},
   {"java/util/NoSuchElementException", "java/lang/RuntimeException", 0}, {"java/util/EmptyStackException", "java/lang/RuntimeException", 0},
   {"java/lang/String", "java/lang/Object", 3}, {"java/lang/StringBuffer", "java/lang/Object", 3}, {"java/lang/StringBuilder", "java/lang/Object", 3},
-  {"java/lang/Integer", "java/lang/Object", 1}, {"java/lang/Long", "java/lang/Object", 1}, {"java/lang/Boolean", "java/lang/Object", 1},
+  {"java/lang/Integer", "java/lang/Object", 1}, {"java/lang/Byte", "java/lang/Object", 1}, {"java/lang/Long", "java/lang/Object", 1}, {"java/lang/Boolean", "java/lang/Object", 1},
   {"java/lang/Character", "java/lang/Object", 1}, {"java/io/PrintStream", "java/lang/Object", 0}, {"java/util/Random", "java/lang/Object", 1},
   {"java/util/Vector", "java/lang/Object", 3}, {"java/util/Stack", "java/util/Vector", 0}, {"java/util/ArrayList", "java/lang/Object", 3},
   {"java/util/Hashtable", "java/lang/Object", 3}, {"java/util/HashMap", "java/lang/Object", 3},
