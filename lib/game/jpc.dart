@@ -96,16 +96,17 @@ class _Res {
 
   /// Ảnh không có điểm trong suốt: chép từng hàng một lần thay vì pha từng điểm.
   bool get isOpaque {
-    var o = _opaque;
-    if (o != null) return o;
-    o = true;
+    final c = _opaque;
+    if (c != null) return c;
+    var o = true;
     for (var i = 0; i < px.length; i++) {
       if (px[i] >>> 24 != 255) {
         o = false;
         break;
       }
     }
-    return _opaque = o;
+    _opaque = o;
+    return o;
   }
 }
 
