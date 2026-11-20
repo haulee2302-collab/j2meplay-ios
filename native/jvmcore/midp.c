@@ -569,8 +569,8 @@ void installMidp(void) {
 void midpSetScreen(int w, int h) { if (w != g_sw || h != g_sh) { g_sw = w; g_sh = h; needKey = 1; if (g_screenG) gReset(g_screenG, w, h); } g_repaint = 1; }
 void midpRequestRepaint(void) { g_repaint = 1; }
 
-void midpSetDraw(int on) { g_noDraw = !on; if (on) midpForceKey(); }
 void midpForceKey(void) { needKey = 1; g_repaint = 1; frameOpen = 0; }
+void midpSetDraw(int on) { g_noDraw = !on; if (on) midpForceKey(); }
 void midpReset(void) {
   fontCls = imgCls = gfxCls = cmdCls = dispCls = canvasCls = rsCls = 0; defFont = 0; g_resId = 1; g_gcG = 0; g_cur = g_display = g_screenG = g_midlet = 0; gcCanvas = 0;
   g_repaint = 0; g_inPaint = 0; g_keyBits = 0; lastPaint = 0; evh = evt = 0; evT = 0; evBusy = evPaint = 0; rsList = 0; warnedText = 0; frameOpen = 0; needKey = 1; epoch = 1; g_frames = 0; g_destroyed = 0;
