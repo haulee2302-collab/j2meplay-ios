@@ -91,7 +91,9 @@ class _ActionDialogState extends State<_ActionDialog> {
   late final TextEditingController name = TextEditingController(text: widget.r.deviceName);
   final proxy = TextEditingController();
   late String screen = (widget.r.screenWidth == 400 && widget.r.screenHeight == 350) ? '400x350' : '320x480';
-  String proxyMode = 'free', proxyType = 'socks5';
+  // Chỉ 2 chế độ: Tắt (hệ thống tự chọn proxy / IP server) và Bật (proxy riêng của người thuê cho cả phiên).
+  late bool proxyOn = widget.r.proxyManual;
+  late String proxyType = widget.r.proxyType;
   bool sending = false;
   String? err;
 
@@ -124,13 +126,27 @@ class _ActionDialogState extends State<_ActionDialog> {
         ]);
         break;
       case 'proxy':
-        body = Column(mainAxisSize: MainAxisSize.min, children: [
-          _Choice('Proxy miễn phí', 'Dùng proxy có sẵn của hệ thống', proxyMode == 'free', () => setState(() => proxyMode = 'free')),
-          _Choice('Proxy riêng', 'Nhập proxy SOCKS5 / HTTP của bạn', proxyMode == 'custom', () => setState(() => proxyMode = 'custom')),
-          _Choice('Tắt proxy', 'Dùng IP của máy chủ', proxyMode == 'off', () => setState(() => proxyMode = 'off')),
-          if (proxyMode == 'custom') ...[
+        final manualNow = r.proxyManual;
+        final labelColor = manualNow ? Jp.success : Jp.primary;
+        body = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Nhãn hiện tại: Tắt · IP x (tím) / Proxy riêng · IP x (xanh).
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(color: labelColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+            child: Text('${manualNow ? 'Proxy riêng' : 'Tắt'}${r.proxyIp.isNotEmpty ? ' · IP ${r.proxyIp}' : ''}',
+                style: TextStyle(color: labelColor, fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Dùng proxy riêng', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Jp.text)),
+              Text('Bật: dùng proxy bạn nhập cho cả phiên thuê.', style: TextStyle(fontSize: 12, color: Jp.muted)),
+            ])),
+            Switch(value: proxyOn, activeColor: Jp.primary, onChanged: sending ? null : (v) => setState(() => proxyOn = v)),
+          ]),
+          if (proxyOn) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              padding: const EdgeInsets.only(top: 8, bottom: 8),
               child: Row(children: [
                 for (final t in const [('socks5', 'SOCKS5'), ('http', 'HTTP')]) ...[
                   Expanded(child: GestureDetector(
@@ -160,7 +176,7 @@ class _ActionDialogState extends State<_ActionDialog> {
       default:
         body = Text('${r.deviceName} sẽ tắt và game đang chạy bị đóng. Thời gian thuê vẫn tiếp tục tính. Bạn có thể bật lại bất cứ lúc nào.', style: TextStyle(color: Jp.muted, fontSize: 14));
     }
-    final canSave = !sending && (k != 'name' || name.text.trim().isNotEmpty) && (k != 'proxy' || proxyMode != 'custom' || proxy.text.trim().isNotEmpty);
+    final canSave = !sending && (k != 'name' || name.text.trim().isNotEmpty) && (k != 'proxy' || !proxyOn || proxy.text.trim().isNotEmpty);
     void go() {
       switch (k) {
         case 'name': send('/api/site/rentals/$id/name', {'name': name.text.trim()}, 'Đã đổi tên máy'); break;
@@ -169,7 +185,7 @@ class _ActionDialogState extends State<_ActionDialog> {
           send('/api/site/rentals/$id/screen-size', {'width': p[0], 'height': p[1]}, 'Đang đổi màn hình ${p[0]} × ${p[1]}…');
           break;
         case 'proxy':
-          send('/api/site/rentals/$id/proxy', {'enabled': proxyMode != 'off', 'free': proxyMode == 'free', 'type': proxyType, 'address': proxy.text.trim()}, 'Đã lưu proxy');
+          send('/api/site/rentals/$id/proxy', {'enabled': proxyOn, 'type': proxyType, 'address': proxy.text.trim()}, 'Đã lưu proxy');
           break;
         case 'restart': send('/api/site/rentals/$id/restart', {}, 'Đang khởi động lại ${r.deviceName}…'); break;
         default: send('/api/site/rentals/$id/power-off', {}, 'Đang tắt ${r.deviceName}…');

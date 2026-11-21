@@ -23,7 +23,11 @@ class Rental {
   final String? machineStatus, productName, connectionStatus;
   final bool autoRenew;
   final String deviceCode;
-  Rental(this.id, this.deviceName, this.status, this.endsAt, this.machineStatus, this.productName, this.connectionStatus, this.screenWidth, this.screenHeight, [this.autoRenew = false, this.deviceCode = '']);
+  /// Proxy: 'manual' = proxy riêng của người thuê (Bật); khác = Tắt (hệ thống tự chọn proxy, IP server cũng là một proxy).
+  final String proxyMode, proxyIp, proxyType;
+  Rental(this.id, this.deviceName, this.status, this.endsAt, this.machineStatus, this.productName, this.connectionStatus, this.screenWidth, this.screenHeight,
+      [this.autoRenew = false, this.deviceCode = '', this.proxyMode = '', this.proxyIp = '', this.proxyType = 'socks5']);
+  bool get proxyManual => proxyMode == 'manual';
 
   int get endsMs => endsAt <= 0 ? 0 : (endsAt < 100000000000 ? endsAt * 1000 : endsAt);
   bool get expired => endsMs > 0 && endsMs <= DateTime.now().millisecondsSinceEpoch;
@@ -44,6 +48,9 @@ class Rental {
       n(screen?['height']),
       (o['autoRenew'] is Map) && (o['autoRenew'] as Map)['enabled'] == true,
       '${o['deviceCode'] ?? ''}',
+      '${(o['proxy'] is Map ? (o['proxy'] as Map)['mode'] : '') ?? ''}',
+      '${(o['proxy'] is Map ? (o['proxy'] as Map)['ip'] : '') ?? ''}',
+      '${(o['proxy'] is Map ? (o['proxy'] as Map)['type'] : '') ?? ''}' == 'http' ? 'http' : 'socks5',
     );
   }
 }
